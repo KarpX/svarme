@@ -1,7 +1,7 @@
 from sqlalchemy import Column, Integer, String, BigInteger, Boolean, ForeignKey, DateTime, Text
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
-from app.store.database.database import Base
+from app.store.database.sqlalchemy_base import BaseModel as Base
 
 class UserModel(Base):
     __tablename__ = "user"
@@ -41,3 +41,29 @@ class GameModel(Base):
     remaining_seconds = Column(Integer, nullable=True)
 
     current_highest_bet = Column(Integer, nullable=True)
+
+
+class GameCategoriesModel(Base):
+    __tablename__ = "game_categories"
+
+    id = Column(Integer, primary_key=True)
+    game_id = Column(BigInteger, ForeignKey("game.id", ondelete="CASCADE"), nullable=False)
+    category_id = Column(Integer, ForeignKey("category.id", ondelete="CASCADE"), nullable=False)
+
+
+class GameAnsweredQuestionsModel(Base):
+    __tablename__ = "game_answered_questions"
+
+    id = Column(Integer, primary_key=True)
+    game_id = Column(BigInteger, ForeignKey("game.id", ondelete="CASCADE"), nullable=False)
+    question_id = Column(Integer, ForeignKey("question.id", ondelete="CASCADE"), nullable=False)
+
+
+class GameFinalBetsModel(Base):
+    __tablename__ = "game_final_bets"
+
+    id = Column(Integer, primary_key=True)
+    game_id = Column(BigInteger, ForeignKey("game.id", ondelete="CASCADE"), nullable=False)
+    user_id = Column(BigInteger, ForeignKey("user.id", ondelete="CASCADE"), nullable=False)
+    bet = Column(Integer, nullable=True)
+    is_ready = Column(Boolean, default=False)

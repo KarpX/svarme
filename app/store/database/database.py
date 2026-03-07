@@ -17,7 +17,7 @@ class Database:
     def __init__(self, app: "Application"):
         self.app = app
         self.engine: AsyncEngine = None
-        self.sessionmaker: async_sessionmaker[AsyncSession] = None
+        self.sessionmaker: async_sessionmaker[AsyncSession] | None = None
         self.database = BaseModel
 
     async def connect(self, *args, **kwargs) -> None:

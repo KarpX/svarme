@@ -1,4 +1,5 @@
 import asyncio
+import sys
 from logging.config import fileConfig
 
 from sqlalchemy import pool
@@ -7,7 +8,12 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 
 from alembic import context
 
-from app.store.database import BaseModel
+from app.store.database.sqlalchemy_base import BaseModel
+import app.store.quiz.models  # noqa: F401 — registers tables in metadata
+import app.store.game.models  # noqa: F401 — registers tables in metadata
+
+if sys.platform == "win32":
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
@@ -71,6 +77,13 @@ async def run_async_migrations() -> None:
         config.get_section(config.config_ini_section, {}),
         prefix="sqlalchemy.",
         poolclass=pool.NullPool,
+        connect_args={
+            "server_settings": {
+                "jit": "off",
+                "timezone": "UTC",
+            },
+            "command_timeout": 60,
+        },
     )
 
     async with connectable.connect() as connection:

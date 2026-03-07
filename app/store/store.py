@@ -10,7 +10,6 @@ async def _on_startup(app: "Application"):
     await app.database.connect()
     await app.store.tg_api.connect()
     app.store.poller.start()
-    print(">>> Database connected and Bot Poller started")
 
 async def _on_cleanup(app: "Application"):
     await app.store.poller.stop()
