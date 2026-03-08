@@ -1,2 +1,2 @@
-__appname__ = "LegendaryJeopardy"
+__appname__ = "Svarme"
 __version__ = "0.1.0"
