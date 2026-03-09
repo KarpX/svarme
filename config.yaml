@@ -1,0 +1,12 @@
+bot:
+  token: "8680531196:AAF3LtwQaP1PPiBTVdaCTOkH5TnqJmW63b0"
+
+database:
+  host: "localhost"
+  port: 5433
+  user: "postgres"
+  password: "postgres"
+  database: "svarme"
+admin:
+  email: "admin@admin.com"
+  password: "123456789"
