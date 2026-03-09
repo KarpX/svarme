@@ -1,17 +1,23 @@
 from sqlalchemy import Column, Integer, String, ForeignKey, Text
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.store.database.sqlalchemy_base import BaseModel as Base
 
 class CategoryModel(Base):
     __tablename__ = "category"
 
-    id = Column(Integer, primary_key=True)
-    name = Column(String(255), nullable=False)
-    round = Column(Integer, default=1)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(255))
+    round: Mapped[int] = mapped_column(default=1)
+    
+    questions: Mapped[list["QuestionModel"]] = relationship(back_populates="category")
 
 class QuestionModel(Base):
     __tablename__ = "question"
-    id = Column(Integer, primary_key=True)
-    category_id = Column(Integer, ForeignKey("category.id", ondelete="CASCADE"), nullable=False)
-    text = Column(Text, nullable=False)
-    answer = Column(Text, nullable=False)
-    price = Column(Integer, nullable=False)
+    
+    id: Mapped[int] = mapped_column(primary_key=True)
+    category_id: Mapped[int] = mapped_column(ForeignKey("category.id", ondelete="CASCADE"))
+    text: Mapped[str] = mapped_column(Text)
+    answer: Mapped[str] = mapped_column(Text)
+    price: Mapped[int] = mapped_column()
+
+    category: Mapped["CategoryModel"] = relationship(back_populates="questions")

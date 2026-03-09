@@ -20,13 +20,11 @@ class BotCommands:
     menu = "/menu"
 
 
-CATEGORIES = [
-    {"id": 1, "name": "🌍 География"},
-    {"id": 2, "name": "🔬 Наука"},
-    {"id": 3, "name": "🎬 Кино"},
-    {"id": 4, "name": "🎵 Музыка"},
-    {"id": 5, "name": "⚽ Спорт"},
-]
+CATEGORIES = [{"id": 1, "name": "🌍 География"},
+            {"id": 2, "name": "🔬 Наука"},
+            {"id": 3, "name": "🎬 Кино"},
+            {"id": 4, "name": "🎵 Музыка"},
+            {"id": 5, "name": "⚽ Спорт"},]
 
 QUESTION_PRICES = [100, 200, 300, 400, 500]
 
@@ -40,7 +38,6 @@ def build_game_mode_keyboard() -> dict:
         row.append({
             "text": mode["name"], "callback_data": f"gm:{mode['game_mode']}"
         })
-    print(row)
     return {"inline_keyboard": [row]}
 
 def build_category_keyboard() -> dict:
@@ -66,7 +63,6 @@ def build_question_keyboard(category_id: int) -> dict:
         rows.append(row)
     rows.append([{"text": "← Назад", "callback_data": "back"}])
     return {"inline_keyboard": rows}
-
 
 class TgApiAccessor:
     def __init__(self, app):
@@ -112,8 +108,7 @@ class TgApiAccessor:
 
         keyboard = {
             "keyboard": [
-                [{"text": BotButtons.rules}, {"text" : BotButtons.menu}],
-                [{"text" : BotButtons.surrender} ]
+                [{"text": BotButtons.rules}, {"text" : BotButtons.surrender} ],
             ],
             "resize_keyboard": True, 
             "one_time_keyboard": False
@@ -131,7 +126,7 @@ class TgApiAccessor:
         url = f"https://api.telegram.org/bot{self.app.config.bot.token}/sendMessage"
         payload = {
             "chat_id": chat_id,
-            "text": "🕹 Выберите режим игры:",
+            "text": "🎮 Выберите режим игры",
             "reply_markup": json.dumps(build_game_mode_keyboard()),
             "parse_mode": "HTML",
         }

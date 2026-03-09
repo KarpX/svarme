@@ -55,6 +55,9 @@ class BotManager:
                 )
             elif text in (BotButtons.menu, BotCommands.menu):
                 await self.app.store.tg_api.send_start_menu(chat_id)
+            elif text in (BotButtons.surrender):
+                await self.app.store.tg_api.send_message(chat_id, "Вы сдались! 😢")
+                await self.app.store.tg_api.send_start_menu(chat_id)
             elif text:
                 await self.app.store.tg_api.send_message(chat_id, text)
 
@@ -86,11 +89,13 @@ class BotManager:
             elif data.startswith("gm:"):
                 _, game_mode = data.split(":")
                 await self.app.store.tg_api.delete_message(chat_id, message_id)
+                
                 if game_mode == "standart":
                     await self.app.store.tg_api.send_game_menu(chat_id)
                     await self.app.store.tg_api.send_category_keyboard(chat_id)
                 elif game_mode == "blitz":
-                    await self.app.store.tg_api.send_message(chat_id, "БЫСТРЫЙ РЕЖИМ ЩИЩ")
+                    await self.app.store.tg_api.send_game_menu(chat_id)
+                    await self.app.store.tg_api.send_category_keyboard(chat_id)
             elif data == "back":
                 await self.app.store.tg_api.edit_message(
                     chat_id,

@@ -1,69 +1,70 @@
+from alembic.environment import Optional
 from sqlalchemy import Column, Integer, String, BigInteger, Boolean, ForeignKey, DateTime, Text
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 from app.store.database.sqlalchemy_base import BaseModel as Base
 
 class UserModel(Base):
     __tablename__ = "user"
 
-    id = Column(BigInteger, unique=True, primary_key=True)
-    game_id = Column(Integer, ForeignKey("game.id", ondelete="SET NULL"), nullable=True)
-    points = Column(Integer, default=0)
-
-    statistic = relationship("StatisticModel", uselist=False, back_populates="user")
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, unique=True)
+    game_id: Mapped[Optional[int]] = mapped_column(BigInteger, ForeignKey("game.id", ondelete="SET NULL"))
+    points: Mapped[int] = mapped_column(default=0)
+    
+    statistic: Mapped["StatisticModel"] = relationship(back_populates="user", uselist=False)
 
 class StatisticModel(Base):
     __tablename__ = "statistic"
 
-    user_id = Column(BigInteger, ForeignKey("user.id", ondelete="CASCADE"), primary_key=True)
-    games_played = Column(Integer, default=0)
-    max_points = Column(Integer, default=0)
-    right_answers = Column(Integer, default=0)
-    wins = Column(Integer, default=0)
+    user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("user.id", ondelete="CASCADE"), primary_key=True)
+    games_played: Mapped[int] = mapped_column(default=0)
+    max_points: Mapped[int] = mapped_column(default=0)
+    right_answers: Mapped[int] = mapped_column(default=0)
+    wins: Mapped[int] = mapped_column(default=0)
 
-    user = relationship("UserModel", back_populates="statistic")
+    user: Mapped["UserModel"] = relationship(back_populates="statistic")
 
 class GameModel(Base):
     __tablename__ = "game"
 
-    id = Column(BigInteger, primary_key=True)
-    game_mode = Column(String(50), nullable=False)
-    game_type = Column(String(50), nullable=False)
-    status = Column(String(20), default="waiting")
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    current_round = Column(Integer, default=1)
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    game_mode: Mapped[str] = mapped_column(String(50), nullable=False)
+    game_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    status: Mapped[str] = mapped_column(String(20), default="waiting")
+    created_at: Mapped[DateTime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    current_round: Mapped[int] = mapped_column(Integer, default=1)
 
-    choosing_user_id = Column(BigInteger, nullable=True)
-    target_user_id = Column(BigInteger, nullable=True)
-    active_question_id = Column(Integer, nullable=True)
+    choosing_user_id: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
+    target_user_id: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
+    active_question_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
 
-    question_asked_at = Column(DateTime(timezone=True), nullable=True)
-    remaining_seconds = Column(Integer, nullable=True)
+    question_asked_at: Mapped[Optional[DateTime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    remaining_seconds: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
 
-    current_highest_bet = Column(Integer, nullable=True)
+    current_highest_bet: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
 
 
 class GameCategoriesModel(Base):
     __tablename__ = "game_categories"
 
-    id = Column(Integer, primary_key=True)
-    game_id = Column(BigInteger, ForeignKey("game.id", ondelete="CASCADE"), nullable=False)
-    category_id = Column(Integer, ForeignKey("category.id", ondelete="CASCADE"), nullable=False)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    game_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("game.id", ondelete="CASCADE"), nullable=False)
+    category_id: Mapped[int] = mapped_column(Integer, ForeignKey("category.id", ondelete="CASCADE"), nullable=False)
 
 
 class GameAnsweredQuestionsModel(Base):
     __tablename__ = "game_answered_questions"
 
-    id = Column(Integer, primary_key=True)
-    game_id = Column(BigInteger, ForeignKey("game.id", ondelete="CASCADE"), nullable=False)
-    question_id = Column(Integer, ForeignKey("question.id", ondelete="CASCADE"), nullable=False)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    game_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("game.id", ondelete="CASCADE"), nullable=False)
+    question_id: Mapped[int] = mapped_column(Integer, ForeignKey("question.id", ondelete="CASCADE"), nullable=False)
 
 
 class GameFinalBetsModel(Base):
     __tablename__ = "game_final_bets"
 
-    id = Column(Integer, primary_key=True)
-    game_id = Column(BigInteger, ForeignKey("game.id", ondelete="CASCADE"), nullable=False)
-    user_id = Column(BigInteger, ForeignKey("user.id", ondelete="CASCADE"), nullable=False)
-    bet = Column(Integer, nullable=True)
-    is_ready = Column(Boolean, default=False)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    game_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("game.id", ondelete="CASCADE"), nullable=False)
+    user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("user.id", ondelete="CASCADE"), nullable=False)
+    bet: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    is_ready: Mapped[bool] = mapped_column(Boolean, default=False)
