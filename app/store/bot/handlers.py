@@ -1,5 +1,14 @@
 from app.store.bot.router import BotRouter
-from app.store.tg_api.builers import GAME_BUTTONS, GAME_START_TEXT, MENU_BUTTONS, MENU_TEXT, RULES_TEXT, SURRENDER_TEXT, build_category_keyboard, build_question_keyboard
+from app.store.tg_api.builders import (
+    GAME_BUTTONS, 
+    GAME_START_TEXT, 
+    MENU_BUTTONS, 
+    MENU_TEXT, 
+    RULES_TEXT, 
+    SURRENDER_TEXT, 
+    build_category_keyboard, 
+    build_game_mode_keyboard, 
+    build_question_keyboard)
 from app.store.tg_api.game_constants import CATEGORIES, BotButtons, BotCommands, GameModes
 
 router = BotRouter()
@@ -11,7 +20,7 @@ async def handle_start(self, chat_id: int):
 
 @router.message(BotCommands.start_game, BotButtons.start_game)
 async def handle_start_game(self, chat_id: int):
-    await self.app.store.tg_api.send_game_mode_choose_keyboard(chat_id)
+    await self.app.store.tg_api.send_inline_keyboard(chat_id, "🎮 Выберите режим игры", build_game_mode_keyboard())
 
 @router.callback("cat:")
 async def handle_category_click(self, chat_id, message_id, data):
@@ -56,12 +65,12 @@ async def handle_game_mode_click(self, chat_id, message_id, data):
     await self.app.store.tg_api.delete_message(chat_id, message_id)
     await self.app.store.tg_api.send_keyboard(chat_id, GAME_BUTTONS, GAME_START_TEXT)
     if game_mode == GameModes.STANDART.value:
-        await self.app.store.tg_api.send_category_keyboard(chat_id)
+        await self.app.store.tg_api.send_inline_keyboard(chat_id, "📋 Выберите категорию:", build_category_keyboard())
     elif game_mode == GameModes.BLITZ.value:
-        await self.app.store.tg_api.send_category_keyboard(chat_id)
+        await self.app.store.tg_api.send_inline_keyboard(chat_id, "📋 Выберите категорию:", build_category_keyboard())
 
 @router.callback("back")
-async def handle_back_click(self, chat_id, message_id): 
+async def handle_back_click(self, chat_id, message_id, data): 
     await self.app.store.tg_api.edit_message(
                 chat_id,
                 message_id,

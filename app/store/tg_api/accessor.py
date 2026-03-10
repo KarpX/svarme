@@ -3,7 +3,7 @@ import json
 from aiohttp import ClientSession
 import aiohttp
 
-from app.store.tg_api.builers import build_category_keyboard, build_game_mode_keyboard, build_question_keyboard
+from app.store.tg_api.builders import build_category_keyboard, build_game_mode_keyboard, build_question_keyboard
 from app.store.tg_api.game_constants import BotButtons, BotCommands
 
 
@@ -62,6 +62,16 @@ class TgApiAccessor:
             "reply_markup": json.dumps(keyboard)
         }
 
+        await self.session.post(url, json=payload)
+
+    async def send_inline_keyboard(self, chat_id: int, text: str, keyboard: dict):
+        url = f"{self.build_url}/sendMessage"
+        payload = {
+            "chat_id": chat_id,
+            "text": text,
+            "reply_markup": json.dumps(keyboard),
+            "parse_mode": "HTML",
+        }
         await self.session.post(url, json=payload)
 
     async def send_game_mode_choose_keyboard(self, chat_id: int):
