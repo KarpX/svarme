@@ -24,6 +24,9 @@ class Store:
         from app.store.bot.manager import BotManager
         from app.store.bot.poller import Poller
 
+        from app.store.quiz.accessor import QuizAccessor
+
+        self.quiz = QuizAccessor(self)
         self.user = UserAccessor(self)
         self.tg_api = TgApiAccessor(app)
         self.bot = BotManager(app)

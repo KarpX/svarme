@@ -1,7 +1,7 @@
 from app.store.tg_api.game_constants import CATEGORIES, QUESTION_PRICES, GameModes, BotButtons, BotCommands
 
 MENU_TEXT = "🏠 Меню" \
-            "\n\n 🗺 Основная навигация"\
+            "\n\n 🧭 Основная навигация"\
             f"\n{BotCommands.start_game} – 🚀 Начать игру"\
             f"\n{BotCommands.stats} – 🏆 Статистика"\
             f"\n{BotCommands.rules} – 📜 Правила"
