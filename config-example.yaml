@@ -1,9 +1,9 @@
 bot:
-  token: "8680531196:AAHcjAkfEl4GT3lo2n9iHaegdS10v4hpay4"
+  token: "YOUR_TOKEN_HERE"
 
 database:
   host: "localhost"
-  port: 5433
+  port: 5432
   user: "postgres"
   password: "postgres"
   database: "svarme"
