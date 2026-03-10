@@ -122,6 +122,7 @@ class TgApiAccessor:
 
         await self.session.post(url, json=payload)
 
+<<<<<<< HEAD
     async def send_game_mode_choose_keyboard(self, chat_id: int):
         url = f"https://api.telegram.org/bot{self.app.config.bot.token}/sendMessage"
         payload = {
@@ -138,6 +139,14 @@ class TgApiAccessor:
             "chat_id": chat_id,
             "text": "📋 Выберите категорию:",
             "reply_markup": json.dumps(build_category_keyboard()),
+=======
+    async def send_inline_keyboard(self, chat_id: int, text: str, keyboard: dict):
+        url = f"{self.build_url}/sendMessage"
+        payload = {
+            "chat_id": chat_id,
+            "text": text,
+            "reply_markup": json.dumps(keyboard),
+>>>>>>> 860256a (fix: deleted non-used functions)
             "parse_mode": "HTML",
         }
         await self.session.post(url, json=payload)
