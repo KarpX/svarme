@@ -74,26 +74,6 @@ class TgApiAccessor:
         }
         await self.session.post(url, json=payload)
 
-    async def send_game_mode_choose_keyboard(self, chat_id: int):
-        url = f"{self.build_url}/sendMessage"
-        payload = {
-            "chat_id": chat_id,
-            "text": "🎮 Выберите режим игры",
-            "reply_markup": json.dumps(build_game_mode_keyboard()),
-            "parse_mode": "HTML",
-        }
-        await self.session.post(url, json=payload)
-
-    async def send_category_keyboard(self, chat_id: int):
-        url = f"{self.build_url}/sendMessage"
-        payload = {
-            "chat_id": chat_id,
-            "text": "📋 Выберите категорию:",
-            "reply_markup": json.dumps(build_category_keyboard()),
-            "parse_mode": "HTML",
-        }
-        await self.session.post(url, json=payload)
-
     async def edit_message(self, chat_id: int, message_id: int, text: str, keyboard: dict):
         url = f"{self.build_url}/editMessageText"
         payload = {
