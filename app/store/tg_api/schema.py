@@ -5,6 +5,8 @@ class Chat(BaseModel):
 
 class TgUser(BaseModel):
     id: int
+    username: str | None = None
+    first_name: str | None = None
 
 class Message(BaseModel):
     message_id: int

@@ -13,10 +13,11 @@ class BotManager:
             message = update.message
             chat_id = message.chat.id
             text = message.text or ""
-            user_id = message.from_user.id if message.from_user else None
+            from_user = message.from_user
+            user_id = from_user.id if message.from_user else None
 
             if user_id:
-                await self.app.store.user.get_or_create_user(user_id)
+                await self.app.store.user.get_or_create_user(user_id, from_user.username, from_user.first_name)
 
             # Check if this message is an answer to an active question
             if user_id and await self._is_pending_answer(chat_id, user_id):

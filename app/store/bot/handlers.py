@@ -8,7 +8,6 @@ from app.store.tg_api.builders import (
     MENU_BUTTONS,
     MENU_TEXT,
     RULES_TEXT,
-    SURRENDER_TEXT,
     build_answer_button,
     build_category_board,
     build_game_mode_keyboard,
@@ -45,6 +44,11 @@ async def handle_start_game(self, chat_id: int, user_id: int):
         )
         return
     
+    elif len(waiting[chat_id]) > 4:
+        waiting[chat_id].remove(user_id)
+        await self.app.store.tg_api.send_message(chat_id, "❌ Максимальное количество игроков — 4. Вы не были добавлены в игру.")
+        return
+    
     elif len(waiting[chat_id]) >= 2:
         await self.app.store.tg_api.send_inline_keyboard(
             chat_id,
@@ -61,10 +65,11 @@ async def handle_stats(self, chat_id: int, user_id: int):
             chat_id, "У вас нет ни одной игры. Невозможно собрать статистику"
         )
         return
+    user_name = user.display_name if user else f"ID:{user_id}"
     stats = await self.app.store.game.get_user_statistics(user_id)
     await self.app.store.tg_api.send_message(
         chat_id,
-        f"📊 <b>Ваша статистика</b>:\n\n"
+        f"📊 <b>Статистика</b> {user_name}:\n\n"
         f"🎮 Всего игр: {stats.games_played}\n"
         f"🏆 Побед: {stats.wins}\n"
         f"🚀 Лучший результат: {stats.max_points} очков\n"
@@ -93,12 +98,16 @@ async def _finish_game(self, chat_id: int, game_id: int):
 
     sorted_players = sorted(players, key=lambda p: p.points, reverse=True)
     winner = sorted_players[0]
+    winner_user = await self.app.store.user.get_user(winner.id)
+    winner_name = winner_user.display_name if winner_user else f"ID:{winner.id}"
 
     lines = ["🏁 <b>Игра завершена!</b>\n\n📊 Итоговые результаты:"]
     for i, p in enumerate(sorted_players, start=1):
+        p_user = await self.app.store.user.get_user(p.id)
+        p_name = p_user.display_name if p_user else f"ID:{p.id}"
         medal = {1: "🥇", 2: "🥈", 3: "🥉"}.get(i, f"{i}.")
-        lines.append(f"{medal} ID:{p.id} — <b>{p.points}</b> очков")
-    lines.append(f"\n🏆 Победитель: <b>ID:{winner.id}</b> с {winner.points} очками!")
+        lines.append(f"{medal} {p_name} — <b>{p.points}</b> очков")
+    lines.append(f"\n🏆 Победитель: <b>{winner_name}</b> с {winner.points} очками!")
 
     await self.app.store.tg_api.send_message(chat_id, "\n".join(lines))
     await self.app.store.tg_api.send_keyboard(chat_id, MENU_BUTTONS, MENU_TEXT)
@@ -111,8 +120,7 @@ async def _finish_game(self, chat_id: int, game_id: int):
 async def handle_surrender(self, chat_id: int, user_id: int):
     game = await self.app.store.game.get_active_game(chat_id)
     if not game:
-        await self.app.store.tg_api.send_message(chat_id, SURRENDER_TEXT)
-        await self.app.store.tg_api.send_keyboard(chat_id, MENU_BUTTONS, MENU_TEXT)
+        await self.app.store.tg_api.send_message(chat_id, "❌ Нет активной игры, в которой можно сдаться.")
         return
 
     # Remove the surrendering player from the game
@@ -154,9 +162,11 @@ async def _send_category_board(self, chat_id: int, message_id: int | None = None
 
 
 async def _announce_chooser(self, chat_id: int, choosing_user_id: int):
+    user = await self.app.store.user.get_user(choosing_user_id)
+    name = user.display_name if user else f"ID:{choosing_user_id}"
     await self.app.store.tg_api.send_message(
         chat_id,
-        f"🎯 Ход игрока <b>ID:{choosing_user_id}</b>. Выберите категорию и вопрос:",
+        f"🎯 Ход игрока <b>{name}</b>. Выберите категорию и вопрос:",
     )
 
 
@@ -246,6 +256,8 @@ async def handle_question_click(self, chat_id, message_id, data, user_id: int):
 
 @router.callback(AnswerCallback)
 async def handle_answer_button_click(self, chat_id, message_id, data, user_id: int):
+    user = await self.app.store.user.get_user(user_id)
+    name= user.display_name if user else f"ID:{user_id}"
     game = await self.app.store.game.get_active_game(chat_id)
     if not game or game.status != "answering":
         return
@@ -261,7 +273,7 @@ async def handle_answer_button_click(self, chat_id, message_id, data, user_id: i
         chat_id, message_id, "⚡ Кто первый знает ответ?", {"inline_keyboard": []}
     )
     await self.app.store.tg_api.send_message(
-        chat_id, f"✋ Отвечает <b>ID:{user_id}</b>! Напишите ваш ответ:"
+        chat_id, f"✋ Отвечает <b>{name}</b>! Напишите ваш ответ:"
     )
 
 
@@ -298,6 +310,8 @@ async def handle_answer_message(self, chat_id: int, user_id: int, text: str):
         return
     
     answer_list = question.answer.split(":")
+    user = await self.app.store.user.get_user(user_id)
+    user_name = user.display_name if user else f"ID:{user_id}"
 
     if text.strip().lower() == answer_list[0].strip().lower(): # Пока пусть только первый вариант будет. Потом думаем что можно
         # Correct answer
@@ -309,7 +323,7 @@ async def handle_answer_message(self, chat_id: int, user_id: int, text: str):
         await self.app.store.tg_api.send_message(
             chat_id,
             f"✅ Верно! Ответ: <b>{question.answer}</b>\n"
-            f"💰 +{question.price} очков. Счёт игрока ID:{user_id}: <b>{new_points}</b>",
+            f"💰 +{question.price} очков. Счёт игрока {user_name}: <b>{new_points}</b>",
         )
         # Winner gets to choose next question
         await self.app.store.game.update_game(
@@ -325,7 +339,7 @@ async def handle_answer_message(self, chat_id: int, user_id: int, text: str):
         new_points = await self.app.store.game.update_player_points(user_id, -question.price)
         await self.app.store.tg_api.send_message(
             chat_id,
-            f"❌ Неверно! Ответ игрока ID:{user_id}: «{text}»\n"
+            f"❌ Неверно! Ответ игрока {user_name}: «{text}»\n"
             f"💸 -{question.price} очков. Счёт: <b>{new_points}</b>\n\n"
             f"Кто ещё знает ответ?",
         )
