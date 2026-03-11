@@ -18,13 +18,6 @@ class BotCommands:
     surrender = "/surr"
 
 
-CATEGORIES = [{"id": 1, "name": "🌍 География"},
-            {"id": 2, "name": "🔬 Наука"},
-            {"id": 3, "name": "🎬 Кино"},
-            {"id": 4, "name": "🎵 Музыка"},
-            {"id": 5, "name": "⚽ Спорт"},]
-
-QUESTION_PRICES = [100, 200, 300, 400, 500]
 
 class GameModes(Enum):
     STANDART = "standart"

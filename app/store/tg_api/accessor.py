@@ -2,8 +2,6 @@ import json
 
 from aiohttp import ClientSession
 import aiohttp
-
-from app.store.tg_api.builders import build_category_keyboard, build_game_mode_keyboard, build_question_keyboard
 from app.store.tg_api.game_constants import BotButtons, BotCommands
 
 
@@ -22,30 +20,6 @@ class TgApiAccessor:
     async def send_message(self, chat_id: int, text: str):
         url = f"{self.build_url}/sendMessage"
         await self.session.post(url, json={"chat_id": chat_id, "text": text, "parse_mode" : "HTML"})
-
-    async def send_start_menu(self, chat_id: int):
-        url = f"{self.build_url}/sendMessage"
-        
-        keyboard = {
-            "keyboard": [
-                [{"text": BotButtons.start_game}, {"text": BotButtons.statistics}],
-                [{"text": BotButtons.rules}, {"text" : BotButtons.menu}]
-            ],
-            "resize_keyboard": True, 
-            "one_time_keyboard": False
-        }
-
-        payload = {
-            "chat_id": chat_id,
-            "text": "🏠 Меню"
-            "\n\n 🗺 Основная навигация"
-            f"\n{BotCommands.start_game} – 🚀 Начать игру"
-            f"\n{BotCommands.stats} – 🏆 Статистика"
-            f"\n{BotCommands.rules} – 📜 Правила",
-            "reply_markup": json.dumps(keyboard)
-        }
-
-        await self.session.post(url, json=payload)
 
     async def send_keyboard(self, chat_id: int, buttons: list, text, resize_keyboard=True, one_time_keyboard=False):
         url = f"{self.build_url}/sendMessage"
