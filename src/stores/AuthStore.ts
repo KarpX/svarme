@@ -18,12 +18,14 @@ class AuthStore {
         { withCredentials: true },
       );
 
-      runInAction(() => {
-        this.isAuth = true;
-        this.userEmail = res.data.admin.email;
-        this.initialized = true;
-      });
-      return true;
+      if (res.data.ok) {
+        runInAction(() => {
+          this.isAuth = true;
+          this.userEmail = email;
+          this.initialized = true;
+        });
+        return true;
+      }
     } catch (e) {
       console.error("Login failed");
       return false;
@@ -32,7 +34,9 @@ class AuthStore {
 
   checkAuth = async () => {
     try {
-      const res = await axios.get("/admin/me", { withCredentials: true });
+      const res = await axios.get("/admin/categories", {
+        withCredentials: true,
+      });
 
       runInAction(() => {
         this.isAuth = true;

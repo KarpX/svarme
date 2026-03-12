@@ -9,7 +9,7 @@ class CategoryModel(Base):
     name: Mapped[str] = mapped_column(String(255))
     round: Mapped[int] = mapped_column(default=1)
     
-    questions: Mapped[list["QuestionModel"]] = relationship(back_populates="category")
+    questions: Mapped[list["QuestionModel"]] = relationship(back_populates="category", cascade="all, delete-orphan", passive_deletes=True)
 
 class QuestionModel(Base):
     __tablename__ = "question"
@@ -21,3 +21,12 @@ class QuestionModel(Base):
     price: Mapped[int] = mapped_column()
 
     category: Mapped["CategoryModel"] = relationship(back_populates="questions")
+
+    def to_dict(self):
+        return{
+            "id": self.id,
+            "text": self.text,
+            "answer": self.answer,
+            "price": self.price,
+            "category_id": self.category_id
+        }

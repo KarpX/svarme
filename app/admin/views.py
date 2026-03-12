@@ -1,3 +1,5 @@
+import json
+
 from aiohttp import web
 from pydantic import ValidationError
 
@@ -173,3 +175,28 @@ class QuestionsView(web.View):
 
         await self.request.app.store.quiz.delete_question(question_id)
         return web.json_response({"message": "Question deleted"}, status=200)
+
+class QuestionsImportView(web.View):
+    async def post(self):
+        category_id = int(self.request.query.get("category_id"))
+
+        data = await self.request.post()
+        file_field = data.get("file")
+
+        if not file_field:
+            return web.json_response({"error": "No file provided"}, status=400)
+        
+        content = file_field.file.read()
+        questions_data = json.loads(content)
+
+        created_questions = []
+        for item in questions_data:
+            new_question = await self.request.app.store.quiz.create_question(
+                text=item["text"],
+                answer=item["answer"],
+                price=item["price"],
+                category_id=category_id
+            )
+            created_questions.append(new_question.to_dict())
+        
+        return web.json_response({"ok" : True, "questions" : created_questions})

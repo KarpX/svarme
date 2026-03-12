@@ -67,6 +67,18 @@ def build_category_board(categories) -> dict:
     return {"inline_keyboard": rows}
 
 
+def build_final_category_remove_keyboard(categories) -> dict:
+    """Final round: category removal screen, 2 per row. callback_data: 'fcat:{cat.id}'"""
+    rows = []
+    for i in range(0, len(categories), 2):
+        row = [
+            {"text": cat.name, "callback_data": f"fcat:{cat.id}"}
+            for cat in categories[i : i + 2]
+        ]
+        rows.append(row)
+    return {"inline_keyboard": rows}
+
+
 def build_question_keyboard(questions) -> dict:
     """Price selection screen for one category.
 

@@ -2,6 +2,7 @@ from pydantic import BaseModel, Field
 
 class Chat(BaseModel):
     id: int
+    type: str = "group"
 
 class TgUser(BaseModel):
     id: int

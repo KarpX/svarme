@@ -5,6 +5,7 @@ import { observer } from "mobx-react-lite";
 export const LoginPage = observer(() => {
   const onFinish = async (values: any) => {
     const success = await authStore.login(values.email, values.password);
+    console.log(`SUCCESS: ${success}`);
     if (success) {
       message.success("Добро пожаловать!");
     } else {
