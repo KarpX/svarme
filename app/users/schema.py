@@ -1,5 +1,5 @@
-from marshmallow import Schema
+from pydantic import BaseModel
 
 
-class UserSchema(Schema):
+class UserSchema(BaseModel):
     pass
