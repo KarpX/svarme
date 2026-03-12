@@ -1,40 +1,29 @@
-import { makeAutoObservable } from 'mobx';
-import { observer, useLocalObservable } from 'mobx-react-lite';
-import { Button } from 'antd';
+import { observer } from "mobx-react-lite";
+import { useEffect } from "react";
+import { authStore } from "./stores/AuthStore";
+import { LoginPage } from "./pages/LoginPage";
+import { AdminDashboard } from "./pages/AdminDashboard"; // Вынеси туда свой текущий код со списком
+import { Spin } from "antd";
 
-import viteLogo from '/kts.svg'
+const App = observer(() => {
+  // Проверяем авторизацию один раз при запуске
+  useEffect(() => {
+    authStore.checkAuth();
+  }, []);
 
-import s from './App.module.css'
-
-class Counter {
-  count: number = 0
-
-  constructor(initial: number = 0) {
-    this.count = initial
-
-    makeAutoObservable(this)
-
-    this.increment = this.increment.bind(this)
+  // Пока проверяем куки — показываем крутилку
+  if (!authStore.initialized) {
+    return (
+      <div
+        style={{ display: "flex", justifyContent: "center", marginTop: 100 }}
+      >
+        <Spin size="large" tip="Загрузка..." />
+      </div>
+    );
   }
 
-  increment() {
-    this.count++
-  }
-}
+  // Главный выбор: логин или админка
+  return authStore.isAuth ? <AdminDashboard /> : <LoginPage />;
+});
 
-function App() {
-  const counter = useLocalObservable(() => new Counter())
-
-  return (
-    <div className={s.app}>
-      <img src={viteLogo} className={s.logo} alt="logo" />
-
-
-      <Button onClick={counter.increment}>
-        count is {counter.count}
-      </Button>
-    </div>
-  )
-}
-
-export default observer(App)
+export default App;

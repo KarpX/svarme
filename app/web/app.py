@@ -1,36 +1,38 @@
 from aiohttp import web
-from aiohttp.web import (
-    Application as AiohttpApplication,
-)
+from aiohttp.web import Application as AiohttpApplication
 
 from app.store.store import setup_store
 from app.web.config import setup_config
-from app.store.database.database import Database
 from app.web.logger import setup_logging
-
-from .routes import setup_routes
+from app.web.mw import auth_middleware
+from app.web.routes import setup_routes
 
 __all__ = ("Application",)
 
 
 class Application(AiohttpApplication):
-    config = "./config.yaml"
+    config = None
     store = None
     database = None
 
 
-app = Application()
-
-
 def setup_app(config_path: str) -> Application:
+    app = Application(middlewares=[auth_middleware])
+    app["admin_sessions"] = set()
+    app["waiting"] = {}          # chat_id -> set of user_ids waiting to start
+    app["pending_players"] = {}  # chat_id -> list of user_ids ready to play
+    app["right_answers"] = {}              # chat_id -> {user_id: count}
+    app["final_removed_categories"] = {}   # game_id -> set of removed category_ids
+    app["final_answers"] = {}              # game_id -> {user_id: answer_text}
+
     setup_logging(app)
     setup_config(app, config_path)
     setup_routes(app)
     setup_store(app)
 
-    # setup_middlewares(app)
     return app
 
+
 if __name__ == "__main__":
-    app = setup_app(app.config)
+    app = setup_app("./config.yaml")
     web.run_app(app, port=8000)

@@ -1,0 +1,10 @@
+**pycache**/
+\*.pyc
+venv/
+.env
+.pytest_cache/
+
+# Общее
+
+node_modules/
+.git/

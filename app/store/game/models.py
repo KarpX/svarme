@@ -1,17 +1,27 @@
-from alembic.environment import Optional
-from sqlalchemy import Column, Integer, String, BigInteger, Boolean, ForeignKey, DateTime, Text
+from typing import Optional
+from sqlalchemy import Integer, String, BigInteger, Boolean, ForeignKey, DateTime
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 from app.store.database.sqlalchemy_base import BaseModel as Base
+
 
 class UserModel(Base):
     __tablename__ = "user"
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, unique=True)
-    game_id: Mapped[Optional[int]] = mapped_column(BigInteger, ForeignKey("game.id", ondelete="SET NULL"))
+    game_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("game.id", ondelete="SET NULL"), nullable=True)
+    username: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    first_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     points: Mapped[int] = mapped_column(default=0)
-    
+
     statistic: Mapped["StatisticModel"] = relationship(back_populates="user", uselist=False)
+
+    @property
+    def display_name(self) -> str:
+        if self.username:
+            return f"@{self.username}"
+        return self.first_name or f"ID:{self.id}"
+
 
 class StatisticModel(Base):
     __tablename__ = "statistic"
@@ -24,24 +34,26 @@ class StatisticModel(Base):
 
     user: Mapped["UserModel"] = relationship(back_populates="statistic")
 
+
 class GameModel(Base):
     __tablename__ = "game"
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    chat_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
     game_mode: Mapped[str] = mapped_column(String(50), nullable=False)
     game_type: Mapped[str] = mapped_column(String(50), nullable=False)
     status: Mapped[str] = mapped_column(String(20), default="waiting")
     created_at: Mapped[DateTime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     current_round: Mapped[int] = mapped_column(Integer, default=1)
 
-    choosing_user_id: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
-    target_user_id: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
-    active_question_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    choosing_user_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    target_user_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    active_question_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
-    question_asked_at: Mapped[Optional[DateTime]] = mapped_column(DateTime(timezone=True), nullable=True)
-    remaining_seconds: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    question_asked_at: Mapped[DateTime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    remaining_seconds: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
-    current_highest_bet: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    current_highest_bet: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
 
 class GameCategoriesModel(Base):
@@ -66,5 +78,5 @@ class GameFinalBetsModel(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     game_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("game.id", ondelete="CASCADE"), nullable=False)
     user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("user.id", ondelete="CASCADE"), nullable=False)
-    bet: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    bet: Mapped[int | None] = mapped_column(Integer, nullable=True)
     is_ready: Mapped[bool] = mapped_column(Boolean, default=False)
