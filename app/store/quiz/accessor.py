@@ -1,7 +1,6 @@
-import random
 from typing import TYPE_CHECKING
 
-from sqlalchemy import select, not_
+from sqlalchemy import func, select, not_
 from sqlalchemy.orm import selectinload
 
 from app.store.game.models import GameCategoriesModel
@@ -71,14 +70,21 @@ class QuizAccessor:
         self, round: int, limit: int = 5
     ) -> list[CategoryModel]:
         async with self._session() as session:
-            result = await session.execute(
-                select(CategoryModel)
-                .options(selectinload(CategoryModel.questions))
-                .where(CategoryModel.round == round)
-            )
-            all_categories = result.scalars().all()
+            query = select(CategoryModel).options(selectinload(CategoryModel.questions))
+
+            if round != 0:
+                query = query.where(CategoryModel.round == round and CategoryModel.round != 4)
+
+            query = query.order_by(func.random())
+            # result = await session.execute(
+            #     select(CategoryModel)
+            #     .options(selectinload(CategoryModel.questions))
+            #     .where(CategoryModel.round == round)
+            # )
+            result = await session.execute(query)
+            all_categories = result.scalars().unique().all()
             with_questions = [c for c in all_categories if c.questions]
-            return random.sample(with_questions, min(limit, len(with_questions)))        
+            return with_questions[:limit]      
         
     async def delete_question(self, id: int) -> None:
         async with self._session() as session:

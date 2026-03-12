@@ -194,5 +194,6 @@ $RECYCLE.BIN/
 
 docker-compose.yaml
 config.yaml
+backup.sql
 
 # End of https://www.toptal.com/developers/gitignore/api/windows,python

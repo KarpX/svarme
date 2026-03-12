@@ -7,6 +7,7 @@ class BotButtons:
     menu = "☰ Меню"
 
     surrender = "🏳️ Сдаться"
+    finish_game = "🏁 Закончить игру"
 
 
 class BotCommands:
@@ -16,7 +17,14 @@ class BotCommands:
     menu = "/menu"
 
     surrender = "/surr"
+    finish_game = "/finish"
 
+SURR_FACES = {
+    1 : "😵‍💫",
+    2 : "🥴",
+    3 : "😶‍🌫️",
+    4 : "🤯"
+}
 
 
 class GameModes(Enum):
