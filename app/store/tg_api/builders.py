@@ -6,6 +6,9 @@ MENU_TEXT = (
     f"\n{BotCommands.start_game} – 🚀 Начать игру"
     f"\n{BotCommands.stats} – 🏆 Статистика"
     f"\n{BotCommands.rules} – 📜 Правила"
+    
+    f"\n\n 🎮 Команды в игре"
+    f"\n{BotCommands.surrender} – 🏳️ Сдаться"
 )
 
 RULES_TEXT = (
@@ -28,8 +31,9 @@ RULES_TEXT = (
     "<i>🍀 Удачи в сражении умов!</i>"
 )
 
-GAME_START_TEXT = "Игра началась!"
-SURRENDER_TEXT = "Вы сдались! 😢"
+GAME_START_TEXT = "🎉 Игра началась!"\
+    f"\n{BotCommands.rules} – 📜 Правила"\
+    f"\n{BotCommands.surrender} – 🏳️ Сдаться"
 
 MENU_BUTTONS = [
     [{"text": BotButtons.start_game}, {"text": BotButtons.statistics}],
@@ -57,6 +61,18 @@ def build_category_board(categories) -> dict:
     for i in range(0, len(categories), 2):
         row = [
             {"text": cat.name, "callback_data": f"cat:{cat.id}"}
+            for cat in categories[i : i + 2]
+        ]
+        rows.append(row)
+    return {"inline_keyboard": rows}
+
+
+def build_final_category_remove_keyboard(categories) -> dict:
+    """Final round: category removal screen, 2 per row. callback_data: 'fcat:{cat.id}'"""
+    rows = []
+    for i in range(0, len(categories), 2):
+        row = [
+            {"text": cat.name, "callback_data": f"fcat:{cat.id}"}
             for cat in categories[i : i + 2]
         ]
         rows.append(row)

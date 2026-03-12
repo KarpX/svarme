@@ -1,8 +1,10 @@
 from typing import TYPE_CHECKING
 
-from sqlalchemy import select, update
+from sqlalchemy import delete, select, update
+from sqlalchemy.orm import selectinload
 
-from app.store.game.models import GameAnsweredQuestionsModel, GameModel, StatisticModel, UserModel
+from app.store.game.models import GameAnsweredQuestionsModel, GameCategoriesModel, GameFinalBetsModel, GameModel, StatisticModel, UserModel
+from app.store.quiz.models import CategoryModel
 
 if TYPE_CHECKING:
     from app.store.store import Store
@@ -119,3 +121,78 @@ class GameAccessor:
                 select(StatisticModel).where(StatisticModel.user_id == user_id)
             )
             return result.scalar_one_or_none()
+
+    async def get_player_active_game(self, user_id: int) -> GameModel | None:
+        """Return the active game the user is currently in (via user.game_id)."""
+        async with self._session() as session:
+            result = await session.execute(
+                select(UserModel).where(UserModel.id == user_id)
+            )
+            user = result.scalar_one_or_none()
+            if user is None or user.game_id is None:
+                return None
+            result = await session.execute(
+                select(GameModel)
+                .where(GameModel.id == user.game_id)
+                .where(GameModel.status != "finished")
+            )
+            return result.scalar_one_or_none()
+
+    async def create_final_bet(self, game_id: int, user_id: int) -> None:
+        async with self._session() as session:
+            session.add(GameFinalBetsModel(game_id=game_id, user_id=user_id, bet=None, is_ready=False))
+            await session.commit()
+
+    async def set_final_bet(self, game_id: int, user_id: int, bet: int) -> None:
+        async with self._session() as session:
+            await session.execute(
+                update(GameFinalBetsModel)
+                .where(GameFinalBetsModel.game_id == game_id)
+                .where(GameFinalBetsModel.user_id == user_id)
+                .values(bet=bet, is_ready=True)
+            )
+            await session.commit()
+
+    async def get_final_bets(self, game_id: int) -> list[GameFinalBetsModel]:
+        async with self._session() as session:
+            result = await session.execute(
+                select(GameFinalBetsModel).where(GameFinalBetsModel.game_id == game_id)
+            )
+            return list(result.scalars().all())
+
+    async def get_final_bet(self, game_id: int, user_id: int) -> GameFinalBetsModel | None:
+        async with self._session() as session:
+            result = await session.execute(
+                select(GameFinalBetsModel)
+                .where(GameFinalBetsModel.game_id == game_id)
+                .where(GameFinalBetsModel.user_id == user_id)
+            )
+            return result.scalar_one_or_none()
+        
+    async def set_game_categories(self, game_id: int, category_ids: list[int]) -> None:
+        async with self._session() as session:
+            await session.execute(
+                delete(GameCategoriesModel).where(GameCategoriesModel.game_id == game_id)
+            )
+
+            for category_id in category_ids:
+                game_category = GameCategoriesModel(game_id=game_id, category_id=category_id)
+                session.add(game_category)
+            await session.commit()
+
+    async def get_game_categories(self, game_id: int) -> list[CategoryModel]:
+        async with self._session() as session:
+            result = await session.execute(
+                select(CategoryModel)
+                .options(selectinload(CategoryModel.questions))
+                .join(GameCategoriesModel)
+                .where(GameCategoriesModel.game_id == game_id)
+            )
+            return result.scalars().all()
+        
+    async def clear_game_categories(self, game_id: int) -> None:
+        async with self._session() as session:
+            await session.execute(
+                delete(GameCategoriesModel).where(GameCategoriesModel.game_id == game_id)
+            )
+            await session.commit()

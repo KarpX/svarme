@@ -1,4 +1,5 @@
-from app.store.bot.handlers import handle_answer_message, router
+from app.store.bot.handlers import handle_answer_message, handle_final_answer_message, handle_final_bet_message, router
+from app.store.tg_api.game_constants import BotButtons
 from app.store.tg_api.schema import Update
 
 
@@ -13,10 +14,17 @@ class BotManager:
             message = update.message
             chat_id = message.chat.id
             text = message.text or ""
-            user_id = message.from_user.id if message.from_user else None
+            from_user = message.from_user
+            user_id = from_user.id if message.from_user else None
+
+            is_menu_button = text in [BotButtons.start_game, BotButtons.menu, BotButtons.rules, BotButtons.statistics, BotButtons.surrender]
 
             if user_id:
-                await self.app.store.user.get_or_create_user(user_id)
+                await self.app.store.user.get_or_create_user(user_id, from_user.username, from_user.first_name)
+
+            if text.startswith("/") or is_menu_button:
+                await self.router.route_message(self, chat_id, user_id or 0, text)
+                return
 
             # Check if this message is an answer to an active question
             if user_id and await self._is_pending_answer(chat_id, user_id):
@@ -25,6 +33,27 @@ class BotManager:
 
             # During answering state, ignore messages from non-answerers
             if user_id and await self._is_game_answering(chat_id):
+                return
+
+            # Handle final round DM messages (betting / answering)
+            if user_id and message.chat.type == "private":
+                game = await self.app.store.game.get_player_active_game(user_id)
+                if game and game.status == "final_betting":
+                    await handle_final_bet_message(self, user_id, text)
+                    return
+                if game and game.status == "final_answering":
+                    await handle_final_answer_message(self, user_id, text, game)
+                    return
+                
+            if user_id and message.chat.type != "private":
+                if await self._is_pending_answer(chat_id, user_id):
+                    await handle_answer_message(self, chat_id, user_id, text)
+                    return
+
+                if await self._is_game_answering(chat_id):
+                    return
+                
+            if message.chat.type != "private":
                 return
 
             await self.router.route_message(self, chat_id, user_id or 0, text)

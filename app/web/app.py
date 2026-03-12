@@ -21,7 +21,9 @@ def setup_app(config_path: str) -> Application:
     app["admin_sessions"] = set()
     app["waiting"] = {}          # chat_id -> set of user_ids waiting to start
     app["pending_players"] = {}  # chat_id -> list of user_ids ready to play
-    app["right_answers"] = {}    # chat_id -> {user_id: count}
+    app["right_answers"] = {}              # chat_id -> {user_id: count}
+    app["final_removed_categories"] = {}   # game_id -> set of removed category_ids
+    app["final_answers"] = {}              # game_id -> {user_id: answer_text}
 
     setup_logging(app)
     setup_config(app, config_path)

@@ -4,6 +4,8 @@ from typing import TYPE_CHECKING
 from sqlalchemy import select, not_
 from sqlalchemy.orm import selectinload
 
+from app.store.game.models import GameCategoriesModel
+from app.store.quiz.llm import LLMService
 from app.store.quiz.models import CategoryModel, QuestionModel
 
 if TYPE_CHECKING:
@@ -13,6 +15,7 @@ if TYPE_CHECKING:
 class QuizAccessor:
     def __init__(self, store: "Store"):
         self.store = store
+        self.llm = LLMService(self.store.app)
 
     @property
     def _session(self):
@@ -75,7 +78,7 @@ class QuizAccessor:
             )
             all_categories = result.scalars().all()
             with_questions = [c for c in all_categories if c.questions]
-            return random.sample(with_questions, min(limit, len(with_questions)))
+            return random.sample(with_questions, min(limit, len(with_questions)))        
         
     async def delete_question(self, id: int) -> None:
         async with self._session() as session:

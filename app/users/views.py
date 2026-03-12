@@ -1,4 +1,5 @@
 import secrets
+import hashlib
 
 from aiohttp import web
 from pydantic import ValidationError
@@ -16,9 +17,10 @@ class AdminLoginView(web.View):
             return web.json_response({"error": e.errors()}, status=400)
 
         config = self.request.app.config.admin
-        if payload.email != config.email or payload.password != config.password:
+        password_hash = hashlib.sha256(payload.password.encode()).hexdigest()
+        if payload.email != config.email or password_hash != config.password:
             return web.json_response({"error": "Invalid credentials"}, status=401)
-
+        
         token = secrets.token_hex(32)
         self.request.app["admin_sessions"].add(token)
 

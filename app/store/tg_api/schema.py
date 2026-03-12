@@ -2,9 +2,12 @@ from pydantic import BaseModel, Field
 
 class Chat(BaseModel):
     id: int
+    type: str = "group"
 
 class TgUser(BaseModel):
     id: int
+    username: str | None = None
+    first_name: str | None = None
 
 class Message(BaseModel):
     message_id: int
