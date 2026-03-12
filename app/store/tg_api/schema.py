@@ -1,21 +1,26 @@
 from pydantic import BaseModel, Field
-from typing import Optional
 
 class Chat(BaseModel):
+    id: int
+
+class TgUser(BaseModel):
     id: int
 
 class Message(BaseModel):
     message_id: int
     chat: Chat
-    text: Optional[str] = None
+    from_user: TgUser | None = Field(None, alias="from")
+    text: str | None = None
+
+    model_config = {"populate_by_name": True}
 
 class CallbackQuery(BaseModel):
     id: str
-    from_user: Chat = Field(..., alias="from")
-    message: Optional[Message] = None
+    from_user: TgUser = Field(..., alias="from")
+    message: Message | None = None
     data: str
 
 class Update(BaseModel):
     update_id: int
-    message: Optional[Message] = None
-    callback_query: Optional[CallbackQuery] = None
+    message: Message | None = None
+    callback_query: CallbackQuery | None = None

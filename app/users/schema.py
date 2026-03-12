@@ -1,5 +1,6 @@
 from pydantic import BaseModel
 
 
-class UserSchema(BaseModel):
-    pass
+class AdminLoginSchema(BaseModel):
+    email: str
+    password: str
