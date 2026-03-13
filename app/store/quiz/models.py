@@ -1,4 +1,4 @@
-from sqlalchemy import String, ForeignKey, Text
+from sqlalchemy import JSON, String, ForeignKey, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.store.database.sqlalchemy_base import BaseModel as Base
 
@@ -17,7 +17,7 @@ class QuestionModel(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     category_id: Mapped[int] = mapped_column(ForeignKey("category.id", ondelete="CASCADE"))
     text: Mapped[str] = mapped_column(Text)
-    answer: Mapped[str] = mapped_column(Text)
+    answer: Mapped[list[str]] = mapped_column(JSON, default=list)
     price: Mapped[int] = mapped_column()
 
     category: Mapped["CategoryModel"] = relationship(back_populates="questions")

@@ -338,7 +338,7 @@ export const AdminDashboard = observer(() => {
                     >
                       <p>{q.text}</p>
                       <div style={{ color: "#52c41a" }}>
-                        <strong>Ответ:</strong> {q.answer}
+                        <strong>Ответ:</strong> {q.answer.join(", ")}
                       </div>
                     </Card>
                   </List.Item>

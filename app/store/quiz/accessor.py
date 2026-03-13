@@ -84,7 +84,7 @@ class QuizAccessor:
             result = await session.execute(query)
             all_categories = result.scalars().unique().all()
             with_questions = [c for c in all_categories if c.questions]
-            return with_questions[:limit]      
+            return with_questions[:limit]  
         
     async def delete_question(self, id: int) -> None:
         async with self._session() as session:

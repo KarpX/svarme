@@ -53,3 +53,6 @@ class FinishGameCallback(CallbackBase):
 class FinalCategoryCallback(CallbackBase):
     prefix = "fcat:"
     category_id: int
+
+class FinishGameVoteCallback(CallbackBase):
+    prefix = "finish_game_vote"

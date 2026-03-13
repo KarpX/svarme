@@ -80,3 +80,28 @@ class GameFinalBetsModel(Base):
     user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("user.id", ondelete="CASCADE"), nullable=False)
     bet: Mapped[int | None] = mapped_column(Integer, nullable=True)
     is_ready: Mapped[bool] = mapped_column(Boolean, default=False)
+
+
+class GameFinalRemovedCategoryModel(Base):
+    __tablename__ = "game_final_removed_categories"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    game_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("game.id", ondelete="CASCADE"), nullable=False)
+    category_id: Mapped[int] = mapped_column(Integer, ForeignKey("category.id", ondelete="CASCADE"), nullable=False)
+
+
+class GameFinalAnswerModel(Base):
+    __tablename__ = "game_final_answers"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    game_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("game.id", ondelete="CASCADE"), nullable=False)
+    user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("user.id", ondelete="CASCADE"), nullable=False)
+    answer: Mapped[str] = mapped_column(String(1000), nullable=False)
+
+
+class GameFinishVoteModel(Base):
+    __tablename__ = "game_finish_votes"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    game_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("game.id", ondelete="CASCADE"), nullable=False)
+    user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("user.id", ondelete="CASCADE"), nullable=False)

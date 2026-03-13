@@ -1,5 +1,5 @@
 from app.store.bot.handlers import handle_answer_message, handle_final_answer_message, handle_final_bet_message, router
-from app.store.tg_api.game_constants import BotButtons
+from app.store.tg_api.game_constants import BotButtons, ChatType, GameStatus
 from app.store.tg_api.schema import Update
 
 
@@ -38,16 +38,16 @@ class BotManager:
                 return
 
             # Handle final round DM messages (betting / answering)
-            if user_id and message.chat.type == "private":
+            if user_id and message.chat.type == ChatType.PRIVATE.value:
                 game = await self.app.store.game.get_player_active_game(user_id)
-                if game and game.status == "final_betting":
+                if game and game.status == GameStatus.FINAL_BETTING.value:
                     await handle_final_bet_message(self, user_id, text)
                     return
-                if game and game.status == "final_answering":
+                if game and game.status == GameStatus.FINAL_ANSWERING.value:
                     await handle_final_answer_message(self, user_id, text, game)
                     return
                 
-            if user_id and message.chat.type != "private":
+            if user_id and message.chat.type != ChatType.PRIVATE.value:
                 if await self._is_pending_answer(chat_id, user_id):
                     await handle_answer_message(self, chat_id, user_id, text)
                     return
@@ -55,7 +55,7 @@ class BotManager:
                 if await self._is_game_answering(chat_id):
                     return
                 
-            if message.chat.type != "private":
+            if message.chat.type != ChatType.PRIVATE.value:
                 return
 
             await self.router.route_message(self, chat_id, user_id or 0, text)
@@ -75,11 +75,11 @@ class BotManager:
         game = await self.app.store.game.get_active_game(chat_id)
         return (
             game is not None
-            and game.status == "answering"
+            and game.status == GameStatus.ANSWERING.value
             and game.choosing_user_id == user_id
         )
 
     async def _is_game_answering(self, chat_id: int) -> bool:
         """Return True if a game is active and waiting for an answer."""
         game = await self.app.store.game.get_active_game(chat_id)
-        return game is not None and game.status == "answering"
+        return game is not None and game.status == GameStatus.ANSWERING.value

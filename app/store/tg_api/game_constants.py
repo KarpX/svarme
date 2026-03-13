@@ -39,3 +39,17 @@ class GameModes(Enum):
         }
 
         return labels[self]
+    
+class ChatType(Enum):
+    PRIVATE = "private"
+    GROUP = "group"
+
+class GameStatus(Enum):
+    WAITING = "waiting"
+    PENDING = "pending"
+    FINAL_BETTING = "final_betting"
+    FINAL_ANSWERING = "final_answering"
+    FINAL_REMOVING = "final_removing"
+    ANSWERING = "answering"
+    CHOOSING_QUESTION = "choosing_question"
+    FINISHED = "finished"

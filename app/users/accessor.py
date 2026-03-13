@@ -57,3 +57,12 @@ class UserAccessor:
             )
 
             await session.commit()
+
+    async def increment_correct_answers(self, user_id: int):
+        async with self._session() as session:
+            await session.execute(
+                Update(StatisticModel)
+                .where(StatisticModel.user_id == user_id)
+                .values(right_answers=StatisticModel.right_answers + 1)
+            )
+            await session.commit()

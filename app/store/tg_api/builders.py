@@ -1,3 +1,4 @@
+from app.store.bot.callbacks import AnswerCallback, BackCallback, CategoryCallback, FinalCategoryCallback, GameModeCallback, QuestionCallback
 from app.store.tg_api.game_constants import GameModes, BotButtons, BotCommands
 
 MENU_TEXT = (
@@ -45,12 +46,12 @@ GAME_BUTTONS = [[ {"text": BotButtons.finish_game}, {"text": BotButtons.surrende
 
 
 def build_answer_button() -> dict:
-    return {"inline_keyboard": [[{"text": "✋ Ответить!", "callback_data": "ans"}]]}
+    return {"inline_keyboard": [[{"text": "✋ Ответить!", "callback_data": AnswerCallback.prefix}]]}
 
 
 def build_game_mode_keyboard() -> dict:
     row = [
-        {"text": mode.labels, "callback_data": f"gm:{mode.value}"}
+        {"text": mode.labels, "callback_data": GameModeCallback.create_data(game_mode=mode.value)}
         for mode in GameModes
     ]
     return {"inline_keyboard": [row]}
@@ -61,7 +62,7 @@ def build_category_board(categories) -> dict:
     rows = []
     for i in range(0, len(categories), 2):
         row = [
-            {"text": cat.name, "callback_data": f"cat:{cat.id}"}
+            {"text": cat.name, "callback_data": CategoryCallback.create_data(category_id=cat.id)}
             for cat in categories[i : i + 2]
         ]
         rows.append(row)
@@ -73,7 +74,7 @@ def build_final_category_remove_keyboard(categories) -> dict:
     rows = []
     for i in range(0, len(categories), 2):
         row = [
-            {"text": cat.name, "callback_data": f"fcat:{cat.id}"}
+            {"text": cat.name, "callback_data": FinalCategoryCallback.create_data(category_id=cat.id)}
             for cat in categories[i : i + 2]
         ]
         rows.append(row)
@@ -89,11 +90,11 @@ def build_question_keyboard(questions) -> dict:
     rows = []
     row = []
     for q in sorted(questions, key=lambda q: q.price):
-        row.append({"text": str(q.price), "callback_data": f"q:{q.id}"})
+        row.append({"text": str(q.price), "callback_data": QuestionCallback.create_data(question_id=q.id)})
         if len(row) == 3:
             rows.append(row)
             row = []
     if row:
         rows.append(row)
-    rows.append([{"text": "← Назад", "callback_data": "back"}])
+    rows.append([{"text": "← Назад", "callback_data": BackCallback.prefix}])
     return {"inline_keyboard": rows}

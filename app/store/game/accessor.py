@@ -3,7 +3,7 @@ from typing import TYPE_CHECKING
 from sqlalchemy import delete, select, update
 from sqlalchemy.orm import selectinload
 
-from app.store.game.models import GameAnsweredQuestionsModel, GameCategoriesModel, GameFinalBetsModel, GameModel, StatisticModel, UserModel
+from app.store.game.models import GameAnsweredQuestionsModel, GameCategoriesModel, GameFinalAnswerModel, GameFinalBetsModel, GameFinalRemovedCategoryModel, GameFinishVoteModel, GameModel, StatisticModel, UserModel
 from app.store.quiz.models import CategoryModel
 
 if TYPE_CHECKING:
@@ -35,7 +35,7 @@ class GameAccessor:
             result = await session.execute(
                 select(GameModel)
                 .where(GameModel.chat_id == chat_id)
-                .where(GameModel.status != "finished")
+                .where(GameModel.status.notin_(["finished", "waiting", "pending"]))
             )
             return result.scalar_one_or_none()
 
@@ -59,6 +59,17 @@ class GameAccessor:
                 select(UserModel).where(UserModel.game_id == game_id)
             )
             return list(result.scalars().all())
+
+    async def is_player(self, game_id: int, user_id: int) -> bool:
+        """Check whether user_id is a participant of game_id."""
+        async with self._session() as session:
+            result = await session.execute(
+                select(UserModel.id).where(
+                    UserModel.id == user_id,
+                    UserModel.game_id == game_id,
+                )
+            )
+            return result.scalar_one_or_none() is not None
 
     async def remove_player(self, user_id: int) -> None:
         """Detach user from current game (surrender)."""
@@ -194,5 +205,120 @@ class GameAccessor:
         async with self._session() as session:
             await session.execute(
                 delete(GameCategoriesModel).where(GameCategoriesModel.game_id == game_id)
+            )
+            await session.commit()
+
+    # ── Lobby (waiting / pending) ──────────────────────────────────────────
+
+    async def get_lobby_game(self, chat_id: int) -> GameModel | None:
+        """Return the active waiting/pending lobby game for a chat, if any."""
+        async with self._session() as session:
+            result = await session.execute(
+                select(GameModel)
+                .where(GameModel.chat_id == chat_id)
+                .where(GameModel.status.in_(["waiting", "pending"]))
+            )
+            return result.scalar_one_or_none()
+
+    async def create_lobby(self, chat_id: int) -> GameModel:
+        """Create a waiting lobby game (no mode yet)."""
+        async with self._session() as session:
+            game = GameModel(chat_id=chat_id, game_mode="", game_type="group", status="waiting")
+            session.add(game)
+            await session.commit()
+            return game
+
+    async def get_lobby_players(self, chat_id: int) -> list[UserModel]:
+        """Return users currently in the waiting/pending lobby for this chat."""
+        async with self._session() as session:
+            result = await session.execute(
+                select(UserModel)
+                .join(GameModel, UserModel.game_id == GameModel.id)
+                .where(GameModel.chat_id == chat_id)
+                .where(GameModel.status.in_(["waiting", "pending"]))
+            )
+            return list(result.scalars().all())
+
+    async def add_lobby_player(self, chat_id: int, user_id: int) -> GameModel:
+        """Add user to waiting lobby, creating it if needed. Returns the lobby game."""
+        game = await self.get_lobby_game(chat_id)
+        if not game:
+            game = await self.create_lobby(chat_id)
+        await self.add_player(user_id, game.id)
+        return game
+
+    async def remove_lobby_player(self, chat_id: int, user_id: int) -> None:
+        """Remove user from lobby (detach game_id)."""
+        async with self._session() as session:
+            await session.execute(
+                update(UserModel)
+                .where(UserModel.id == user_id)
+                .values(game_id=None)
+            )
+            await session.commit()
+
+    # ── Final round helpers ────────────────────────────────────────────────
+
+    async def add_final_removed_category(self, game_id: int, category_id: int) -> None:
+        async with self._session() as session:
+            session.add(GameFinalRemovedCategoryModel(game_id=game_id, category_id=category_id))
+            await session.commit()
+
+    async def get_final_removed_category_ids(self, game_id: int) -> set[int]:
+        async with self._session() as session:
+            result = await session.execute(
+                select(GameFinalRemovedCategoryModel.category_id)
+                .where(GameFinalRemovedCategoryModel.game_id == game_id)
+            )
+            return set(result.scalars().all())
+
+    async def set_final_answer(self, game_id: int, user_id: int, answer: str) -> None:
+        async with self._session() as session:
+            session.add(GameFinalAnswerModel(game_id=game_id, user_id=user_id, answer=answer))
+            await session.commit()
+
+    async def get_final_answers(self, game_id: int) -> list[GameFinalAnswerModel]:
+        async with self._session() as session:
+            result = await session.execute(
+                select(GameFinalAnswerModel).where(GameFinalAnswerModel.game_id == game_id)
+            )
+            return list(result.scalars().all())
+
+    async def get_final_answer(self, game_id: int, user_id: int) -> GameFinalAnswerModel | None:
+        async with self._session() as session:
+            result = await session.execute(
+                select(GameFinalAnswerModel)
+                .where(GameFinalAnswerModel.game_id == game_id)
+                .where(GameFinalAnswerModel.user_id == user_id)
+            )
+            return result.scalar_one_or_none()
+
+    # ── Finish votes ───────────────────────────────────────────────────────
+
+    async def add_finish_vote(self, game_id: int, user_id: int) -> None:
+        async with self._session() as session:
+            session.add(GameFinishVoteModel(game_id=game_id, user_id=user_id))
+            await session.commit()
+
+    async def has_finish_vote(self, game_id: int, user_id: int) -> bool:
+        async with self._session() as session:
+            result = await session.execute(
+                select(GameFinishVoteModel)
+                .where(GameFinishVoteModel.game_id == game_id)
+                .where(GameFinishVoteModel.user_id == user_id)
+            )
+            return result.scalar_one_or_none() is not None
+
+    async def count_finish_votes(self, game_id: int) -> int:
+        async with self._session() as session:
+            result = await session.execute(
+                select(GameFinishVoteModel).where(GameFinishVoteModel.game_id == game_id)
+            )
+            return len(result.scalars().all())
+
+    async def clear_finish_votes(self, game_id: int) -> None:
+        async with self._session() as session:
+            await session.execute(
+                delete(GameFinishVoteModel).where(GameFinishVoteModel.game_id == game_id)
             )
             await session.commit()

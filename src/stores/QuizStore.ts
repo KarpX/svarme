@@ -4,7 +4,7 @@ import axios from "axios";
 export interface Question {
   id: number;
   text: string;
-  answer: string;
+  answer: Array<string>;
   price: number;
 }
 
