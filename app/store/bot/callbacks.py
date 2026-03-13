@@ -47,6 +47,9 @@ class AnswerCallback(CallbackBase):
 class StartGameCallback(CallbackBase):
     prefix = "start_game"
 
+class FinishGameCallback(CallbackBase):
+    prefix = "finish_game_vote"
+
 class FinalCategoryCallback(CallbackBase):
     prefix = "fcat:"
     category_id: int

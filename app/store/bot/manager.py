@@ -17,7 +17,9 @@ class BotManager:
             from_user = message.from_user
             user_id = from_user.id if message.from_user else None
 
-            is_menu_button = text in [BotButtons.start_game, BotButtons.menu, BotButtons.rules, BotButtons.statistics, BotButtons.surrender]
+            is_menu_button = text in [BotButtons.start_game, 
+            BotButtons.menu, BotButtons.rules, BotButtons.statistics, 
+            BotButtons.surrender, BotButtons.finish_game]
 
             if user_id:
                 await self.app.store.user.get_or_create_user(user_id, from_user.username, from_user.first_name)

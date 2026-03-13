@@ -40,7 +40,8 @@ MENU_BUTTONS = [
     [{"text": BotButtons.rules}, {"text": BotButtons.menu}],
 ]
 
-GAME_BUTTONS = [[{"text": BotButtons.rules}, {"text": BotButtons.surrender}]]
+GAME_BUTTONS = [[ {"text": BotButtons.finish_game}, {"text": BotButtons.surrender}],
+                [{"text": BotButtons.rules}]]
 
 
 def build_answer_button() -> dict:

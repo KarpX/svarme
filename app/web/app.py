@@ -24,6 +24,7 @@ def setup_app(config_path: str) -> Application:
     app["right_answers"] = {}              # chat_id -> {user_id: count}
     app["final_removed_categories"] = {}   # game_id -> set of removed category_ids
     app["final_answers"] = {}              # game_id -> {user_id: answer_text}
+    app["voted_to_finish"] = {}            # game_id -> set of user_ids who voted to finish the game
 
     setup_logging(app)
     setup_config(app, config_path)
