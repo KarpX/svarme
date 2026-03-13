@@ -16,11 +16,13 @@ from app.store.tg_api.builders import (
     build_question_keyboard,
 )
 from app.store.tg_api.game_constants import SURR_FACES, BotButtons, BotCommands, GameModes
+from app.web import logger
+from app.web.utils import ratelimit
 
 router = BotRouter()
 
-
 @router.message("/start")
+@ratelimit(seconds=30)
 async def handle_start(self, chat_id: int, user_id: int):
     await self.app.store.tg_api.send_message(chat_id, "👋 Добро пожаловать в Svarme!")
     await self.app.store.tg_api.send_keyboard(chat_id, MENU_BUTTONS, MENU_TEXT)
@@ -216,9 +218,9 @@ async def _send_category_board(self, chat_id: int, message_id: int | None = None
     
     answered_ids = await self.app.store.game.get_answered_question_ids(game.id) if game else set()
     current_categories = await self.app.store.game.get_game_categories(game.id)
+    is_blitz = game.game_mode == GameModes.BLITZ.value
 
     if not current_categories:
-        is_blitz = game.game_mode == GameModes.BLITZ.value
         count = 3 if is_blitz else 5
         current_categories = await self.app.store.quiz.get_random_categories_for_round(game.current_round if not is_blitz else 0, limit=count)
 
@@ -420,7 +422,8 @@ async def handle_answer_message(self, chat_id: int, user_id: int, text: str):
     user = await self.app.store.user.get_user(user_id)
     user_name = user.display_name if user else f"ID:{user_id}"
 
-    is_correct = text.strip().lower() in (ans.strip().lower() for ans in question.answer.split(":"))
+    is_correct = text.strip().lower() in [ans.strip().lower() for ans in question.answer.split(":")]
+    logger.logging.info(f"{is_correct}, {text.strip().lower()}, {[ans.strip().lower() for ans in question.answer.split(":")]}")
 
     if not is_correct:
         is_correct = await self.app.store.quiz.llm.check_answer(question.text, question.answer, text)
@@ -470,13 +473,20 @@ async def handle_answer_message(self, chat_id: int, user_id: int, text: str):
         await _send_category_board(self, chat_id)
     else:
         # Wrong answer
+        logger.logging.info(f"INCORRECT ANSWER {text}")
         new_points = await self.app.store.game.update_player_points(user_id, -question.price)
         await self.app.store.tg_api.send_message(
             chat_id,
-            f"❌ Неверно! Ответ игрока {user_name}: «{text}»\n"
+            f"❌ Неверно! Ответ игрока {user_name}: «{text.replace(">", "").replace("<", "")}»\n"
             f"💸 -{question.price} очков. Счёт: <b>{new_points}</b>\n\n"
             f"Кто ещё знает ответ?",
         )
+
+        await self.app.store.tg_api.send_message(
+        chat_id,
+        f"📂 Категория: <b>{question.category.name}</b>\n"
+        f"💰 Стоимость: <b>{question.price}</b>\n\n"
+        f"❓ {question.text}")
         # Release the lock — button becomes active again
         await self.app.store.game.update_game(game.id, choosing_user_id=None)
         await self.app.store.tg_api.send_inline_keyboard(
@@ -766,3 +776,12 @@ async def _reveal_final(self, chat_id: int, game_id: int):
         await asyncio.sleep(3)
 
     await _finish_game(self, chat_id, game_id)
+
+
+# ───────────────────────── ADMIN ─────────────────────────
+
+@router.message("/hesoyam")
+async def give_points(self, chat_id, user_id):
+    await self.app.store.user.give_points(user_id)
+    user = await self.app.store.user.get_user(user_id)
+    await self.app.store.tg_api.send_message(chat_id, f"{user_id} Добавлены 1000 очков! Текущий счёт: {user.points}")

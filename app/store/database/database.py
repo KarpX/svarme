@@ -30,7 +30,7 @@ class Database:
             port=config.port,
             database=config.database,
         )
-        self.engine = create_async_engine(url, echo=True)
+        self.engine = create_async_engine(url, echo=False)
         self.sessionmaker = async_sessionmaker(self.engine, expire_on_commit=False)
 
     async def disconnect(self, *args, **kwargs) -> None:

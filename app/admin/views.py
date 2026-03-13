@@ -2,6 +2,7 @@ import json
 
 from aiohttp import web
 from pydantic import ValidationError
+from http import HTTPStatus
 
 from app.admin.schema import (
     CategoryCreateSchema,
@@ -23,24 +24,24 @@ class CategoriesView(web.View):
             data = await self.request.json()
             payload = CategoryCreateSchema.model_validate(data)
         except ValidationError as e:
-            return web.json_response({"error": e.errors()}, status=400)
+            return web.json_response({"error": e.errors()}, status=HTTPStatus.BAD_REQUEST)
 
         category = await self.request.app.store.quiz.create_category(
             name=payload.name, round=payload.round
         )
         return web.json_response(
-            CategorySchema.model_validate(category).model_dump(), status=201
+            CategorySchema.model_validate(category).model_dump(), status=HTTPStatus.CREATED
         )
     
     async def patch(self):
         category_id = self.request.rel_url.query.get("category_id")
         if category_id is None:
-            return web.json_response({"error": "category_id is required"}, status=400)
+            return web.json_response({"error": "category_id is required"}, status=HTTPStatus.BAD_REQUEST)
         
         try:
             category_id = int(category_id)
         except ValueError:
-            return web.json_response({"error": "Invalid category_id"}, status=400)
+            return web.json_response({"error": "Invalid category_id"}, status=HTTPStatus.BAD_REQUEST)
 
         category = await self.request.app.store.quiz.get_category_by_id(category_id)
         if not category:

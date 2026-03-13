@@ -1,6 +1,6 @@
 from typing import TYPE_CHECKING
 
-from sqlalchemy import select
+from sqlalchemy import Update, select
 from sqlalchemy.orm import selectinload
 
 from app.store.game.models import StatisticModel, UserModel
@@ -47,3 +47,13 @@ class UserAccessor:
                 .where(UserModel.id == tg_id)
             )
             return result.scalar_one_or_none()
+        
+    async def give_points(self, user_id):
+        async with self._session() as session:
+            await session.execute(
+                Update(UserModel)
+                .where(UserModel.id == user_id)
+                .values(points=UserModel.points + 10000)
+            )
+
+            await session.commit()
