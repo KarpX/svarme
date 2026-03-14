@@ -76,11 +76,6 @@ class QuizAccessor:
                 query = query.where(CategoryModel.round == round and CategoryModel.round != 4)
 
             query = query.order_by(func.random())
-            # result = await session.execute(
-            #     select(CategoryModel)
-            #     .options(selectinload(CategoryModel.questions))
-            #     .where(CategoryModel.round == round)
-            # )
             result = await session.execute(query)
             all_categories = result.scalars().unique().all()
             with_questions = [c for c in all_categories if c.questions]
@@ -94,7 +89,7 @@ class QuizAccessor:
                 await session.commit()
 
     async def list_questions(
-        self, category_id: int | None = None, exclude_ids: set[int] | None = None
+        self, category_id: int | None = None, exclude_ids: set[int] | None = None, limit: int = 5
     ) -> list[QuestionModel]:
         async with self._session() as session:
             stmt = select(QuestionModel)
@@ -102,5 +97,8 @@ class QuizAccessor:
                 stmt = stmt.where(QuestionModel.category_id == category_id)
             if exclude_ids:
                 stmt = stmt.where(not_(QuestionModel.id.in_(exclude_ids)))
+
+            if limit != 5:
+                stmt = stmt.order_by(func.random())
             result = await session.execute(stmt)
-            return list(result.scalars().all())
+            return list(result.scalars().all())[:limit]

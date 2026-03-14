@@ -9,6 +9,8 @@ class BotButtons:
     surrender = "🏳️ Сдаться"
     finish_game = "🏁 Закончить игру"
 
+    exit_lobby = "⛓️‍💥 Выйти из лобби"
+
 
 class BotCommands:
     start_game = "/game"
@@ -18,6 +20,8 @@ class BotCommands:
 
     surrender = "/surr"
     finish_game = "/finish"
+
+    exit_lobby = "/leave"
 
 SURR_FACES = {
     1 : "😵‍💫",
@@ -39,6 +43,24 @@ class GameModes(Enum):
         }
 
         return labels[self]
+    
+    @property
+    def questions(self):
+        questions = {
+            GameModes.STANDART : 5,
+            GameModes.BLITZ : 3
+        }
+
+        return questions[self]
+    
+    @property
+    def categories(self):
+        categories = {
+            GameModes.STANDART : 5,
+            GameModes.BLITZ : 3
+        }
+
+        return categories[self]
     
 class ChatType(Enum):
     PRIVATE = "private"

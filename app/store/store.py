@@ -1,6 +1,7 @@
 import typing
 
 from app.store.database.database import Database
+from app.store.redis.accessor import RedisAccessor
 
 if typing.TYPE_CHECKING:
     from app.web.app import Application
@@ -8,12 +9,14 @@ if typing.TYPE_CHECKING:
 
 async def _on_startup(app: "Application"):
     await app.database.connect()
+    await app.store.redis.connect(app)
     await app.store.tg_api.connect()
     app.store.poller.start()
 
 async def _on_cleanup(app: "Application"):
     await app.store.poller.stop()
     await app.store.tg_api.disconnect()
+    await app.store.redis.disconnect(app)
     await app.database.disconnect()
 
 class Store:
@@ -33,6 +36,7 @@ class Store:
         self.tg_api = TgApiAccessor(app)
         self.bot = BotManager(app)
         self.poller = Poller(app)
+        self.redis = RedisAccessor(app)
 
 def setup_store(app: "Application") -> None:
     app.database = Database(app)

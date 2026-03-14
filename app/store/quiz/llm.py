@@ -1,7 +1,5 @@
 from gigachat import GigaChat
 
-from app.web import logger
-
 
 class LLMService:
     def __init__(self, app):

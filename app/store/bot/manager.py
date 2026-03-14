@@ -19,7 +19,8 @@ class BotManager:
 
             is_menu_button = text in [BotButtons.start_game, 
             BotButtons.menu, BotButtons.rules, BotButtons.statistics, 
-            BotButtons.surrender, BotButtons.finish_game]
+            BotButtons.surrender, BotButtons.finish_game,
+            BotButtons.exit_lobby]
 
             if user_id:
                 await self.app.store.user.get_or_create_user(user_id, from_user.username, from_user.first_name)

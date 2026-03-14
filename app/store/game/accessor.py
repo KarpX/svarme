@@ -5,6 +5,7 @@ from sqlalchemy.orm import selectinload
 
 from app.store.game.models import GameAnsweredQuestionsModel, GameCategoriesModel, GameFinalAnswerModel, GameFinalBetsModel, GameFinalRemovedCategoryModel, GameFinishVoteModel, GameModel, StatisticModel, UserModel
 from app.store.quiz.models import CategoryModel
+from app.web import logger
 
 if TYPE_CHECKING:
     from app.store.store import Store
@@ -105,7 +106,7 @@ class GameAccessor:
             await session.commit()
             return user.points
 
-    async def update_statistics(self, players: list[UserModel], winner_id: int, right_answers_by_user: dict[int, int]) -> None:
+    async def update_statistics(self, players: list[UserModel], winner_id: int) -> None:
         """Update statistic table for all players after game ends."""
         async with self._session() as session:
             for player in players:
@@ -118,7 +119,6 @@ class GameAccessor:
                     session.add(stat)
 
                 stat.games_played += 1
-                stat.right_answers += right_answers_by_user.get(player.id, 0)
                 if player.points > stat.max_points:
                     stat.max_points = player.points
                 if player.id == winner_id:
@@ -220,10 +220,10 @@ class GameAccessor:
             )
             return result.scalar_one_or_none()
 
-    async def create_lobby(self, chat_id: int) -> GameModel:
+    async def create_lobby(self, chat_id: int, user_id: int) -> GameModel:
         """Create a waiting lobby game (no mode yet)."""
         async with self._session() as session:
-            game = GameModel(chat_id=chat_id, game_mode="", game_type="group", status="waiting")
+            game = GameModel(chat_id=chat_id, game_mode="", game_type="group", status="waiting", choosing_user_id=user_id)
             session.add(game)
             await session.commit()
             return game
@@ -243,18 +243,36 @@ class GameAccessor:
         """Add user to waiting lobby, creating it if needed. Returns the lobby game."""
         game = await self.get_lobby_game(chat_id)
         if not game:
-            game = await self.create_lobby(chat_id)
+            game = await self.create_lobby(chat_id, user_id)
         await self.add_player(user_id, game.id)
         return game
 
     async def remove_lobby_player(self, chat_id: int, user_id: int) -> None:
         """Remove user from lobby (detach game_id)."""
         async with self._session() as session:
+            game = await self.get_lobby_game(chat_id)
+            if not game:
+                return
+
             await session.execute(
-                update(UserModel)
-                .where(UserModel.id == user_id)
-                .values(game_id=None)
+                update(UserModel).where(UserModel.id == user_id).values(game_id=None)
             )
+
+            if game and game.choosing_user_id == user_id:
+                result = await session.execute(
+                    select(UserModel).where(UserModel.game_id == game.id and UserModel.id != user_id)
+                )
+                next_admin = result.scalars().all()
+
+                if next_admin:
+                    game.choosing_user_id = next_admin[0].id
+                    await session.execute(
+                        update(GameModel)
+                        .where(GameModel.id == game.id)
+                        .values(choosing_user_id=next_admin[0].id)
+                    )
+                else:
+                    await session.delete(game)
             await session.commit()
 
     # ── Final round helpers ────────────────────────────────────────────────

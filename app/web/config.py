@@ -21,11 +21,19 @@ class AdminConfig:
     password: str
 
 @dataclass
+class RedisConfig:
+    host: str
+    port: int
+    password: str
+    db: int
+
+@dataclass
 class Config:
     bot: BotConfig
     database: DatabaseConfig
     admin: AdminConfig
     gigachat: BotConfig
+    redis: RedisConfig
 
 if typing.TYPE_CHECKING:
     from .app import Application
@@ -38,5 +46,6 @@ def setup_config(app: "Application", config_path: str) -> None:
         bot=BotConfig(token=app.config["bot"]["token"]),
         database=DatabaseConfig(**app.config["database"]),
         admin=AdminConfig(**app.config["admin"]),
-        gigachat=BotConfig(token=app.config["gigachat"]["token"])
+        gigachat=BotConfig(token=app.config["gigachat"]["token"]),
+        redis=RedisConfig(**app.config["redis"])
     )

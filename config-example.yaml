@@ -10,3 +10,12 @@ database:
 admin:
   email: "admin@admin.com"
   password: "123456789"
+
+gigachat:
+  token: "YOUR_GIGACHAT_TOKEN"
+
+redis:
+  host: "localhost"
+  port: 6379
+  password: 12345
+  db: 0

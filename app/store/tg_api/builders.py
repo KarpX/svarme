@@ -10,6 +10,7 @@ MENU_TEXT = (
     
     f"\n\n 🎮 Команды в игре"
     f"\n{BotCommands.surrender} – 🏳️ Сдаться"
+    f"\n{BotCommands.finish_game} – 🏁 Закончить игру"
 )
 
 RULES_TEXT = (
@@ -38,6 +39,11 @@ GAME_START_TEXT = "🎉 Игра началась!"\
 
 MENU_BUTTONS = [
     [{"text": BotButtons.start_game}, {"text": BotButtons.statistics}],
+    [{"text": BotButtons.rules}, {"text": BotButtons.menu}],
+]
+
+IN_LOBBY_BUTTONS = [
+    [{"text": BotButtons.exit_lobby}, {"text": BotButtons.statistics}],
     [{"text": BotButtons.rules}, {"text": BotButtons.menu}],
 ]
 

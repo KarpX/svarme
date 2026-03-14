@@ -56,3 +56,9 @@ class FinalCategoryCallback(CallbackBase):
 
 class FinishGameVoteCallback(CallbackBase):
     prefix = "finish_game_vote"
+
+class JoinLobbyCallback(CallbackBase):
+    prefix = "join_lobby"
+
+class ExitLobbyCallback(CallbackBase):
+    prefix = "exit_lobby"
