@@ -46,7 +46,8 @@ class TgApiAccessor:
             "reply_markup": json.dumps(keyboard),
             "parse_mode": "HTML",
         }
-        await self.session.post(url, json=payload)
+        async with self.session.post(url, json=payload) as resp:
+            return await resp.json()
 
     async def edit_message(self, chat_id: int, message_id: int, text: str, keyboard: dict):
         url = f"{self.build_url}/editMessageText"
@@ -62,6 +63,25 @@ class TgApiAccessor:
     async def delete_message(self, chat_id: int, message_id: int):
         url = f"{self.build_url}/deleteMessage"
         await self.session.post(url, json={"chat_id": chat_id, "message_id": message_id})
+
+    async def pin_chat_message(self, chat_id: int, message_id: int, disable_notification: bool = True):
+        url = f"{self.build_url}/pinChatMessage"
+        payload = {
+            "chat_id" : chat_id,
+            "message_id" : message_id,
+            "disable_notification" : disable_notification
+        }
+        async with self.session.post(url, data=payload) as resp:
+            return await resp.json()
+        
+    async def unpin_chat_message(self, chat_id: int, message_id: int):
+        url = f"{self.build_url}/unpinChatMessage"
+        payload = {
+            "chat_id": chat_id,
+            "message_id": message_id
+        }
+        async with self.session.post(url, json=payload) as resp:
+            return await resp.json()
 
     async def answer_callback(self, callback_id: str):
         url = f"{self.build_url}/answerCallbackQuery"

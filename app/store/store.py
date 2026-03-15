@@ -11,6 +11,7 @@ async def _on_startup(app: "Application"):
     await app.database.connect()
     await app.store.redis.connect(app)
     await app.store.tg_api.connect()
+    await app.store.bot.restore_timers()
     app.store.poller.start()
 
 async def _on_cleanup(app: "Application"):

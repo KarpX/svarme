@@ -4,7 +4,7 @@ from sqlalchemy import delete, select, update
 from sqlalchemy.orm import selectinload
 
 from app.store.game.models import GameAnsweredQuestionsModel, GameCategoriesModel, GameFinalAnswerModel, GameFinalBetsModel, GameFinalRemovedCategoryModel, GameFinishVoteModel, GameModel, StatisticModel, UserModel
-from app.store.quiz.models import CategoryModel
+from app.store.quiz.models import CategoryModel, QuestionModel
 from app.web import logger
 
 if TYPE_CHECKING:
@@ -39,6 +39,14 @@ class GameAccessor:
                 .where(GameModel.status.notin_(["finished", "waiting", "pending"]))
             )
             return result.scalar_one_or_none()
+        
+    async def get_all_active_games(self) -> list[GameModel] | None:
+        async with self._session() as session:
+            result = await session.execute(
+                select(GameModel)
+                .where(GameModel.status.notin_(["finished", "waiting", "pending"]))
+            )
+            return list(result.scalars().all())
 
     async def update_game(self, game_id: int, **kwargs) -> None:
         async with self._session() as session:
@@ -195,7 +203,7 @@ class GameAccessor:
         async with self._session() as session:
             result = await session.execute(
                 select(CategoryModel)
-                .options(selectinload(CategoryModel.questions))
+                .options(selectinload(CategoryModel.questions).joinedload(QuestionModel.category))
                 .join(GameCategoriesModel)
                 .where(GameCategoriesModel.game_id == game_id)
             )

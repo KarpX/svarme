@@ -75,3 +75,8 @@ class GameStatus(Enum):
     ANSWERING = "answering"
     CHOOSING_QUESTION = "choosing_question"
     FINISHED = "finished"
+
+class GameTimers(Enum):
+    CHOOSE_TIMEOUT = 30   # секунд на выбор категории/вопроса
+    ANSWER_TIMEOUT = 15   # секунд на нажатие кнопки "ответить"
+    ANSWERING_TIMEOUT = 15  # секунд на ввод ответа

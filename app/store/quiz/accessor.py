@@ -73,7 +73,10 @@ class QuizAccessor:
             query = select(CategoryModel).options(selectinload(CategoryModel.questions))
 
             if round != 0:
-                query = query.where(CategoryModel.round == round and CategoryModel.round != 4)
+                query = query.where(CategoryModel.round == round)
+            
+            if round != 4:
+                query = query.where(CategoryModel.round != 4)
 
             query = query.order_by(func.random())
             result = await session.execute(query)
@@ -95,10 +98,11 @@ class QuizAccessor:
             stmt = select(QuestionModel)
             if category_id is not None:
                 stmt = stmt.where(QuestionModel.category_id == category_id)
+            
             if exclude_ids:
                 stmt = stmt.where(not_(QuestionModel.id.in_(exclude_ids)))
 
-            if limit != 5:
-                stmt = stmt.order_by(func.random())
+            stmt = stmt.order_by(QuestionModel.price.asc())
+
             result = await session.execute(stmt)
-            return list(result.scalars().all())[:limit]
+            return list(result.scalars().all())

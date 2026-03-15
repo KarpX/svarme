@@ -1,12 +1,98 @@
-from app.store.bot.handlers import handle_answer_message, handle_final_answer_message, handle_final_bet_message, router
-from app.store.tg_api.game_constants import BotButtons, ChatType, GameStatus
+import asyncio
+
+from app.store.bot.handlers import (
+    handle_answer_message,
+    handle_final_answer_message,
+    handle_final_bet_message,
+    router,
+    _on_choose_timeout,
+    _on_answer_button_timeout,
+    _on_answering_timeout,
+)
+from app.store.tg_api.game_constants import BotButtons, ChatType, GameStatus, GameTimers
 from app.store.tg_api.schema import Update
+from app.web import logger
 
 
 class BotManager:
     def __init__(self, app):
         self.app = app
         self.router = router
+        # game_id -> asyncio.Task
+        self._timers: dict[int, asyncio.Task] = {}
+
+    # ── timer helpers ──────────────────────────────────────────────
+
+    async def restore_timers(self):
+        from datetime import datetime, timezone
+        active_games = await self.app.store.game.get_all_active_games()
+
+        for game in active_games:
+            game_id = game.id
+            chat_id = game.chat_id
+            now = datetime.now(timezone.utc)
+
+            if game.status == GameStatus.CHOOSING_QUESTION.value:
+                # No question_asked_at for choosing phase — just start fresh timer
+                self.schedule_choose_timer(game_id, chat_id)
+
+            elif game.status == GameStatus.ANSWERING.value:
+                if game.choosing_user_id is None:
+                    # Answer button is shown, nobody pressed it yet
+                    if game.question_asked_at:
+                        elapsed = (now - game.question_asked_at.replace(tzinfo=timezone.utc)
+                                   if game.question_asked_at.tzinfo is None
+                                   else now - game.question_asked_at).total_seconds()
+                        seconds_left = max(GameTimers.ANSWER_TIMEOUT.value - elapsed, 5.0)
+                    else:
+                        seconds_left = GameTimers.ANSWER_TIMEOUT.value
+                    self._timers[game_id] = asyncio.create_task(
+                        _on_answer_button_timeout(self, game_id, chat_id, seconds_left)
+                    )
+                else:
+                    # Someone is answering
+                    if game.remaining_seconds is not None:
+                        seconds_left = max(float(game.remaining_seconds), 5.0)
+                    elif game.question_asked_at:
+                        asked_at = (game.question_asked_at.replace(tzinfo=timezone.utc)
+                                    if game.question_asked_at.tzinfo is None
+                                    else game.question_asked_at)
+                        elapsed = (now - asked_at).total_seconds()
+                        seconds_left = max(GameTimers.ANSWERING_TIMEOUT.value - elapsed, 5.0)
+                    else:
+                        seconds_left = GameTimers.ANSWERING_TIMEOUT.value
+                    self.schedule_answering_timer(game_id, chat_id, seconds_left)
+
+    def cancel_timer(self, game_id: int) -> None:
+        task = self._timers.pop(game_id, None)
+        if task and not task.done():
+            task.cancel()
+
+    def schedule_choose_timer(self, game_id: int, chat_id: int) -> None:
+        self.cancel_timer(game_id)
+        logger.logging.info("Choose timer scheduled")
+        self._timers[game_id] = asyncio.create_task(
+            _on_choose_timeout(self, game_id, chat_id, GameTimers.CHOOSE_TIMEOUT.value)
+        )
+
+    def schedule_answer_button_timer(self, game_id: int, chat_id: int, seconds: float = None) -> None:
+        self.cancel_timer(game_id)
+
+        delay = seconds if seconds is not None else GameTimers.ANSWER_TIMEOUT.value
+
+        if delay <= 0:
+            delay = 0
+        self._timers[game_id] = asyncio.create_task(
+            _on_answer_button_timeout(self, game_id, chat_id, delay)
+        )
+
+    def schedule_answering_timer(
+        self, game_id: int, chat_id: int, seconds_left: float = GameTimers.ANSWERING_TIMEOUT.value
+    ) -> None:
+        self.cancel_timer(game_id)
+        self._timers[game_id] = asyncio.create_task(
+            _on_answering_timeout(self, game_id, chat_id, seconds_left)
+        )
 
     async def handle_update(self, update: dict):
         update = Update.model_validate(update)
