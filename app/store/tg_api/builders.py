@@ -4,13 +4,14 @@ from app.store.tg_api.game_constants import GameModes, BotButtons, BotCommands
 MENU_TEXT = (
     "🏠 Меню"
     "\n\n 🧭 Основная навигация"
-    f"\n{BotCommands.start_game} – 🚀 Начать игру"
-    f"\n{BotCommands.stats} – 🏆 Статистика"
-    f"\n{BotCommands.rules} – 📜 Правила"
+    f"\n{BotCommands.start_game} – {BotButtons.start_game}"
+    f"\n{BotCommands.exit_lobby} – {BotButtons.exit_lobby}"
+    f"\n{BotCommands.stats} – {BotButtons.statistics}"
+    f"\n{BotCommands.rules} – {BotButtons.rules}"
     
     f"\n\n 🎮 Команды в игре"
-    f"\n{BotCommands.surrender} – 🏳️ Сдаться"
-    f"\n{BotCommands.finish_game} – 🏁 Закончить игру"
+    f"\n{BotCommands.surrender} – {BotButtons.surrender}"
+    f"\n{BotCommands.finish_game} – {BotButtons.finish_game}"
 )
 
 RULES_TEXT = (

@@ -1,5 +1,5 @@
 from typing import Optional
-from sqlalchemy import Integer, String, BigInteger, Boolean, ForeignKey, DateTime
+from sqlalchemy import JSON, Integer, String, BigInteger, Boolean, ForeignKey, DateTime
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 from app.store.database.sqlalchemy_base import BaseModel as Base
@@ -53,7 +53,14 @@ class GameModel(Base):
     question_asked_at: Mapped[DateTime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     remaining_seconds: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
-    current_highest_bet: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    lobby_messages: Mapped[list["LobbyMessageModel"]] = relationship(backref="game", cascade="all, delete-orphan")
+
+class LobbyMessageModel(Base):
+    __tablename__ = "lobby_messages"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    game_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("game.id", ondelete="CASCADE"))
+    message_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
 
 
 class GameCategoriesModel(Base):

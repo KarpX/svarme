@@ -36,16 +36,22 @@ async def _send_lobby(self, chat_id: int, user_id: int, message_id: int = None):
         if message_id:
             await self.app.store.tg_api.delete_message(chat_id, message_id)
         return
+    
+    if message_id:
+        await self.app.store.game.add_lobby_messages(game.id, message_id)
 
     lobby_players = await self.app.store.game.get_lobby_players(chat_id)
     
     player_names = []
     for p in lobby_players:
         username = p.display_name if p else f'ID:{p}'
-        player_names += [f"\n🟢 {username} 👑" if p.id == game.choosing_user_id else f"\n🟢 {username}"]
+        if p.id == game.choosing_user_id:
+            player_names.insert(0, f"\n🟢 {username} 👑")
+            continue
+        player_names.append(f"\n🟢 {username}")
     empty_players = "\n⚪ Пусто"*(4 - len(lobby_players))
     text = f"🎮 <b>Лобби игры</b>\n\nИгроки:"\
-    f"{''.join(player_names)}{empty_players} \n\nВсего: {len(lobby_players)}/4"
+    f"{''.join(player_names)}{empty_players} \n📌 Всего: {len(lobby_players)}/4"
 
     buttons = []
     if len(lobby_players) < 4:
@@ -58,10 +64,10 @@ async def _send_lobby(self, chat_id: int, user_id: int, message_id: int = None):
 
     keyboard = {"inline_keyboard": buttons}
 
-    if message_id:
-        await self.app.store.tg_api.edit_message(chat_id, message_id, text, keyboard)
+    lobby_msg_ids = await self.app.store.game.get_lobby_messages(game.id)
 
-    else:
+    new_message_id = None
+    if message_id is None:
         response = await self.app.store.tg_api.send_inline_keyboard(
                 chat_id,
                 text,
@@ -69,7 +75,24 @@ async def _send_lobby(self, chat_id: int, user_id: int, message_id: int = None):
             )
         if response and response.get("ok"):
             new_message_id = response["result"]["message_id"]
-            await self.app.store.tg_api.pin_chat_message(chat_id, new_message_id)
+            await self.app.store.game.add_lobby_messages(game.id, new_message_id)
+            try:
+                if len(lobby_msg_ids) < 1:
+                    await self.app.store.tg_api.pin_chat_message(chat_id, new_message_id)
+            except Exception:
+                pass
+
+    lobby_msg_ids = await self.app.store.game.get_lobby_messages(game.id)
+    logger.logging.info(lobby_msg_ids)
+
+    for msg in lobby_msg_ids:
+        if msg == new_message_id:
+            continue
+
+        try:
+            await self.app.store.tg_api.edit_message(chat_id, msg, text, keyboard)
+        except Exception:
+            pass
 
 
 @router.message(BotCommands.start_game, BotButtons.start_game, BotCommands.start_game + "@SvarMeBot")
@@ -84,9 +107,14 @@ async def handle_start_game(self, chat_id: int, user_id: int, message_id = None)
     user = await self.app.store.user.get_or_create_user(user_id)
     user_name = user.display_name if user else f"ID:{user_id}"
 
+    current_game = await self.app.store.game.get_player_active_game(user_id)
+    if current_game:
+        await self.app.store.tg_api.send_message(chat_id, f"❌ {user_name}, ты уже играешь в другом чате! {current_game.id}")
+        return
+
     lobby_players = await self.app.store.game.get_lobby_players(chat_id)
     if any(p.id == user_id for p in lobby_players):
-        await self.app.store.tg_api.send_message(chat_id, f"⛔ {user_name} уже в лобби!")
+        await self.app.store.tg_api.send_message(chat_id, f"⛔ {user_name}, ты уже в лобби!")
         return
     
     if len(lobby_players) >= 4:
@@ -117,7 +145,19 @@ async def handle_exit_lobby(self, chat_id: int, user_id: int, message_id = None)
         await self.app.store.tg_api.send_message(chat_id, f"❌ {user_name} не в лобби")
         return
     
+    lobby = await self.app.store.game.get_lobby_game(chat_id)
+    lobby_msg_ids = await self.app.store.game.get_lobby_messages(lobby.id)
+
     await self.app.store.game.remove_lobby_player(chat_id, user_id)
+
+    players = await self.app.store.game.get_lobby_players(chat_id)
+    
+    if not players or len(players) < 1:
+        for msg in lobby_msg_ids:
+            try:
+                await self.app.store.tg_api.delete_message(chat_id, msg)
+            except Exception:
+                pass
 
     await self.app.store.tg_api.send_keyboard(chat_id, MENU_BUTTONS, f"💨 {user_name} вышел из лобби!")
 
@@ -296,7 +336,7 @@ async def _send_category_board(self, chat_id: int, message_id: int | None = None
     if not categories:
         next_round = game.current_round + 1 if game.current_round is not None else 1
 
-        if next_round == 4 or (is_blitz and next_round == 2):
+        if next_round >= 4 or (is_blitz and next_round == 2):
             await _start_final_round(self, chat_id, game.id)
             return
 
@@ -387,7 +427,6 @@ async def handle_game_mode_click(self, chat_id, message_id, data, user_id: int):
 @router.callback(CategoryCallback)
 @ratelimit(seconds=1)
 async def handle_category_click(self, chat_id, message_id, data, user_id: int):
-    await asyncio.wait(3)
     game = await self.app.store.game.get_active_game(chat_id)
     if not game or game.status != GameStatus.CHOOSING_QUESTION.value:
         return
@@ -519,12 +558,19 @@ async def handle_start_game_click(self, chat_id, message_id, data, user_id: int)
     if game.choosing_user_id != user_id:
         await self.app.store.tg_api.send_message(chat_id, f"❌ {user_name} не может запустить игру. Дождитесь {vip_name}")
         return
+    
 
     # Mark lobby as pending (mode selection in progress)
     lobby = await self.app.store.game.get_lobby_game(chat_id)
+    lobby_msg_ids = await self.app.store.game.get_lobby_messages(lobby.id)
+    for msg in lobby_msg_ids:
+        try:
+            await self.app.store.tg_api.delete_message(chat_id, msg)
+        except Exception:
+            pass
+
     await self.app.store.game.update_game(lobby.id, status="pending")
 
-    await self.app.store.tg_api.delete_message(chat_id, message_id)
     await self.app.store.tg_api.send_inline_keyboard(
         chat_id, "🎮 Выберите режим игры", build_game_mode_keyboard()
     )
@@ -1084,3 +1130,22 @@ async def give_points(self, chat_id, user_id):
     await self.app.store.user.give_points(user_id)
     user = await self.app.store.user.get_user(user_id)
     await self.app.store.tg_api.send_message(chat_id, f"ID:{user_id} Добавлены 10000 очков! Текущий счёт: {user.points}")
+
+@router.message("/next_round")
+async def handle_admin_next_round(self, chat_id: int, user_id: int):
+    # Здесь можно добавить проверку: if user_id not in ADMINS: return
+    
+    game = await self.app.store.game.get_active_game(chat_id)
+    if not game:
+        await self.app.store.tg_api.send_message(chat_id, "❌ Нет активной игры.")
+        return
+
+    # 1. "Сжигаем" текущие вопросы и категории
+    await self.app.store.game.skip_current_round_questions(game.id)
+    
+    # 2. Оповещаем о принудительном переходе
+    await self.app.store.tg_api.send_message(chat_id, "🛠 <b>Админ-панель:</b> Принудительный переход к следующему раунду...")
+    
+    # 3. Вызываем твою функцию. Она увидит, что категорий нет, 
+    # а все старые вопросы в 'answered_ids', и запустит логику смены раунда.
+    await _send_category_board(self, chat_id)

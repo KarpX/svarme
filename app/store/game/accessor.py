@@ -3,7 +3,7 @@ from typing import TYPE_CHECKING
 from sqlalchemy import delete, select, update
 from sqlalchemy.orm import selectinload
 
-from app.store.game.models import GameAnsweredQuestionsModel, GameCategoriesModel, GameFinalAnswerModel, GameFinalBetsModel, GameFinalRemovedCategoryModel, GameFinishVoteModel, GameModel, StatisticModel, UserModel
+from app.store.game.models import GameAnsweredQuestionsModel, GameCategoriesModel, GameFinalAnswerModel, GameFinalBetsModel, GameFinalRemovedCategoryModel, GameFinishVoteModel, GameModel, LobbyMessageModel, StatisticModel, UserModel
 from app.store.quiz.models import CategoryModel, QuestionModel
 from app.web import logger
 
@@ -283,6 +283,36 @@ class GameAccessor:
                     await session.delete(game)
             await session.commit()
 
+    async def add_lobby_messages(self, game_id: int, message_id: int):
+        if not message_id:
+            return
+        
+        async with self._session() as session:
+            exists = await session.execute(
+            select(LobbyMessageModel).where(
+                LobbyMessageModel.game_id == game_id,
+                LobbyMessageModel.message_id == message_id
+                )
+            )
+            if not exists.scalar():
+                session.add(LobbyMessageModel(game_id=game_id, message_id=message_id))
+                await session.commit()
+
+    async def get_lobby_messages(self, game_id: int) -> list[int]:
+        async with self._session() as session:
+            result = await session.execute(
+                select(LobbyMessageModel.message_id)
+                .where(LobbyMessageModel.game_id == game_id)
+            )
+            return list(result.scalars().all())
+        
+    async def clear_lobby_messages(self, game_id: int):
+        async with self._session() as session:
+            await session.execute(
+                delete(LobbyMessageModel).where(LobbyMessageModel.game_id == game_id)
+            )
+            await session.commit()
+
     # ── Final round helpers ────────────────────────────────────────────────
 
     async def add_final_removed_category(self, game_id: int, category_id: int) -> None:
@@ -346,5 +376,29 @@ class GameAccessor:
         async with self._session() as session:
             await session.execute(
                 delete(GameFinishVoteModel).where(GameFinishVoteModel.game_id == game_id)
+            )
+            await session.commit()
+
+    # ----------------- ADMIN ----------------
+
+    async def skip_current_round_questions(self, game_id: int):
+        async with self._session() as session:
+            # Получаем все ID вопросов из категорий, которые сейчас привязаны к игре
+            categories = await self.get_game_categories(game_id)
+            for cat in categories:
+                for q in cat.questions:
+                    # Добавляем их в отвеченные, если их там еще нет
+                    exists = await session.execute(
+                        select(GameAnsweredQuestionsModel).where(
+                            GameAnsweredQuestionsModel.game_id == game_id,
+                            GameAnsweredQuestionsModel.question_id == q.id
+                        )
+                    )
+                    if not exists.scalar():
+                        session.add(GameAnsweredQuestionsModel(game_id=game_id, question_id=q.id))
+            
+            # Очищаем привязку категорий, чтобы _send_category_board сгенерировал новые
+            await session.execute(
+                delete(GameCategoriesModel).where(GameCategoriesModel.game_id == game_id)
             )
             await session.commit()
