@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from sqlalchemy import URL
 from sqlalchemy.ext.asyncio import (
@@ -6,7 +6,6 @@ from sqlalchemy.ext.asyncio import (
     AsyncSession,
     async_sessionmaker, create_async_engine,
 )
-from sqlalchemy.orm import DeclarativeBase
 
 from app.store.database.sqlalchemy_base import BaseModel
 
@@ -30,7 +29,7 @@ class Database:
             port=config.port,
             database=config.database,
         )
-        self.engine = create_async_engine(url, echo=True)
+        self.engine = create_async_engine(url, echo=False)
         self.sessionmaker = async_sessionmaker(self.engine, expire_on_commit=False)
 
     async def disconnect(self, *args, **kwargs) -> None:

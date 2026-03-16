@@ -46,3 +46,19 @@ class AnswerCallback(CallbackBase):
 
 class StartGameCallback(CallbackBase):
     prefix = "start_game"
+
+class FinishGameCallback(CallbackBase):
+    prefix = "finish_game_vote"
+
+class FinalCategoryCallback(CallbackBase):
+    prefix = "fcat:"
+    category_id: int
+
+class FinishGameVoteCallback(CallbackBase):
+    prefix = "finish_game_vote"
+
+class JoinLobbyCallback(CallbackBase):
+    prefix = "join_lobby"
+
+class ExitLobbyCallback(CallbackBase):
+    prefix = "exit_lobby"

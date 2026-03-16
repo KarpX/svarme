@@ -1,5 +1,11 @@
-from pydantic import BaseModel
+from typing_extensions import Annotated
 
+from pydantic import BaseModel, BeforeValidator
+
+def str_to_list(string) -> list[str]:
+    if isinstance(string, str):
+        return [s.strip() for s in string.split(",") if s.strip()]
+    return string
 
 class CategoryCreateSchema(BaseModel):
     name: str
@@ -17,7 +23,7 @@ class CategorySchema(BaseModel):
 class QuestionCreateSchema(BaseModel):
     category_id: int
     text: str
-    answer: str
+    answer: Annotated[list[str], BeforeValidator(str_to_list)]
     price: int
 
 
@@ -25,7 +31,7 @@ class QuestionSchema(BaseModel):
     id: int
     category_id: int
     text: str
-    answer: str
+    answer: Annotated[list[str], BeforeValidator(str_to_list)]
     price: int
 
     model_config = {"from_attributes": True}

@@ -1,9 +1,10 @@
-import random
 from typing import TYPE_CHECKING
 
-from sqlalchemy import select, not_
+from sqlalchemy import func, select, not_
 from sqlalchemy.orm import selectinload
 
+from app.store.game.models import GameCategoriesModel
+from app.store.quiz.llm import LLMService
 from app.store.quiz.models import CategoryModel, QuestionModel
 
 if TYPE_CHECKING:
@@ -13,6 +14,7 @@ if TYPE_CHECKING:
 class QuizAccessor:
     def __init__(self, store: "Store"):
         self.store = store
+        self.llm = LLMService(self.store.app)
 
     @property
     def _session(self):
@@ -68,14 +70,19 @@ class QuizAccessor:
         self, round: int, limit: int = 5
     ) -> list[CategoryModel]:
         async with self._session() as session:
-            result = await session.execute(
-                select(CategoryModel)
-                .options(selectinload(CategoryModel.questions))
-                .where(CategoryModel.round == round)
-            )
-            all_categories = result.scalars().all()
+            query = select(CategoryModel).options(selectinload(CategoryModel.questions))
+
+            if round != 0:
+                query = query.where(CategoryModel.round == round)
+            
+            if round != 4:
+                query = query.where(CategoryModel.round != 4)
+
+            query = query.order_by(func.random())
+            result = await session.execute(query)
+            all_categories = result.scalars().unique().all()
             with_questions = [c for c in all_categories if c.questions]
-            return random.sample(with_questions, min(limit, len(with_questions)))
+            return with_questions[:limit]  
         
     async def delete_question(self, id: int) -> None:
         async with self._session() as session:
@@ -85,13 +92,17 @@ class QuizAccessor:
                 await session.commit()
 
     async def list_questions(
-        self, category_id: int | None = None, exclude_ids: set[int] | None = None
+        self, category_id: int | None = None, exclude_ids: set[int] | None = None, limit: int = 5
     ) -> list[QuestionModel]:
         async with self._session() as session:
             stmt = select(QuestionModel)
             if category_id is not None:
                 stmt = stmt.where(QuestionModel.category_id == category_id)
+            
             if exclude_ids:
                 stmt = stmt.where(not_(QuestionModel.id.in_(exclude_ids)))
+
+            stmt = stmt.order_by(QuestionModel.price.asc())
+
             result = await session.execute(stmt)
             return list(result.scalars().all())

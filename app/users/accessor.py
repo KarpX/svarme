@@ -1,6 +1,6 @@
 from typing import TYPE_CHECKING
 
-from sqlalchemy import select
+from sqlalchemy import Update, select
 from sqlalchemy.orm import selectinload
 
 from app.store.game.models import StatisticModel, UserModel
@@ -17,7 +17,7 @@ class UserAccessor:
     def _session(self):
         return self.store.app.database.sessionmaker
 
-    async def get_or_create_user(self, tg_id: int) -> UserModel:
+    async def get_or_create_user(self, tg_id: int, username: str = None, first_name: str = None) -> UserModel:
         async with self._session() as session:
             result = await session.execute(
                 select(UserModel)
@@ -32,6 +32,11 @@ class UserAccessor:
                 statistic = StatisticModel(user_id=tg_id)
                 session.add(statistic)
                 await session.commit()
+            else:
+                if username and (user.username != username or user.first_name != first_name):
+                    user.username = username
+                    user.first_name = first_name
+                    await session.commit()
             return user
 
     async def get_user(self, tg_id: int) -> UserModel | None:
@@ -42,3 +47,22 @@ class UserAccessor:
                 .where(UserModel.id == tg_id)
             )
             return result.scalar_one_or_none()
+        
+    async def give_points(self, user_id):
+        async with self._session() as session:
+            await session.execute(
+                Update(UserModel)
+                .where(UserModel.id == user_id)
+                .values(points=UserModel.points + 10000)
+            )
+
+            await session.commit()
+
+    async def increment_correct_answers(self, user_id: int):
+        async with self._session() as session:
+            await session.execute(
+                Update(StatisticModel)
+                .where(StatisticModel.user_id == user_id)
+                .values(right_answers=StatisticModel.right_answers + 1)
+            )
+            await session.commit()

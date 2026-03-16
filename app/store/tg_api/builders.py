@@ -1,3 +1,4 @@
+from app.store.bot.callbacks import AnswerCallback, BackCallback, CategoryCallback, FinalCategoryCallback, GameModeCallback, QuestionCallback
 from app.store.tg_api.game_constants import GameModes, BotButtons, BotCommands
 
 MENU_TEXT = (
@@ -6,6 +7,10 @@ MENU_TEXT = (
     f"\n{BotCommands.start_game} – 🚀 Начать игру"
     f"\n{BotCommands.stats} – 🏆 Статистика"
     f"\n{BotCommands.rules} – 📜 Правила"
+    
+    f"\n\n 🎮 Команды в игре"
+    f"\n{BotCommands.surrender} – 🏳️ Сдаться"
+    f"\n{BotCommands.finish_game} – 🏁 Закончить игру"
 )
 
 RULES_TEXT = (
@@ -23,29 +28,36 @@ RULES_TEXT = (
     "• Игроки по очереди удаляют темы, пока не останется одна.\n"
     "• Делаются скрытые ставки. Кто набрал больше всех по итогу — <b>Победитель</b>! 🏆\n\n"
     "\n⚡️ <b>БЫСТРАЯ ИГРА</b>\n\n"
-    "• Сокращенный формат: 3 категории по 4 вопроса.\n"
+    "• Сокращенный формат: 3 категории по 3 вопроса.\n"
     "• Всего 2 этапа: <u>Обычный раунд</u> и <u>Финал</u>.\n\n"
     "<i>🍀 Удачи в сражении умов!</i>"
 )
 
-GAME_START_TEXT = "Игра началась!"
-SURRENDER_TEXT = "Вы сдались! 😢"
+GAME_START_TEXT = "🎉 Игра началась!"\
+    f"\n{BotCommands.rules} – 📜 Правила"\
+    f"\n{BotCommands.surrender} – 🏳️ Сдаться"
 
 MENU_BUTTONS = [
     [{"text": BotButtons.start_game}, {"text": BotButtons.statistics}],
     [{"text": BotButtons.rules}, {"text": BotButtons.menu}],
 ]
 
-GAME_BUTTONS = [[{"text": BotButtons.rules}, {"text": BotButtons.surrender}]]
+IN_LOBBY_BUTTONS = [
+    [{"text": BotButtons.exit_lobby}, {"text": BotButtons.statistics}],
+    [{"text": BotButtons.rules}, {"text": BotButtons.menu}],
+]
+
+GAME_BUTTONS = [[ {"text": BotButtons.finish_game}, {"text": BotButtons.surrender}],
+                [{"text": BotButtons.rules}]]
 
 
 def build_answer_button() -> dict:
-    return {"inline_keyboard": [[{"text": "✋ Ответить!", "callback_data": "ans"}]]}
+    return {"inline_keyboard": [[{"text": "✋ Ответить!", "callback_data": AnswerCallback.prefix}]]}
 
 
 def build_game_mode_keyboard() -> dict:
     row = [
-        {"text": mode.labels, "callback_data": f"gm:{mode.value}"}
+        {"text": mode.labels, "callback_data": GameModeCallback.create_data(game_mode=mode.value)}
         for mode in GameModes
     ]
     return {"inline_keyboard": [row]}
@@ -56,7 +68,19 @@ def build_category_board(categories) -> dict:
     rows = []
     for i in range(0, len(categories), 2):
         row = [
-            {"text": cat.name, "callback_data": f"cat:{cat.id}"}
+            {"text": cat.name, "callback_data": CategoryCallback.create_data(category_id=cat.id)}
+            for cat in categories[i : i + 2]
+        ]
+        rows.append(row)
+    return {"inline_keyboard": rows}
+
+
+def build_final_category_remove_keyboard(categories) -> dict:
+    """Final round: category removal screen, 2 per row. callback_data: 'fcat:{cat.id}'"""
+    rows = []
+    for i in range(0, len(categories), 2):
+        row = [
+            {"text": cat.name, "callback_data": FinalCategoryCallback.create_data(category_id=cat.id)}
             for cat in categories[i : i + 2]
         ]
         rows.append(row)
@@ -72,11 +96,11 @@ def build_question_keyboard(questions) -> dict:
     rows = []
     row = []
     for q in sorted(questions, key=lambda q: q.price):
-        row.append({"text": str(q.price), "callback_data": f"q:{q.id}"})
+        row.append({"text": str(q.price), "callback_data": QuestionCallback.create_data(question_id=q.id)})
         if len(row) == 3:
             rows.append(row)
             row = []
     if row:
         rows.append(row)
-    rows.append([{"text": "← Назад", "callback_data": "back"}])
+    rows.append([{"text": "← Назад", "callback_data": BackCallback.prefix}])
     return {"inline_keyboard": rows}
