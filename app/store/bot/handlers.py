@@ -256,6 +256,7 @@ async def _finish_game(self, chat_id: int, game_id: int):
     await self.app.store.game.update_game(game_id, status=GameStatus.FINISHED.value)
 
     if not players:
+        logger.logging.info("Игроков нет")
         await self.app.store.tg_api.send_message(chat_id, "🏁 Игра завершена. Участников не осталось.")
         await self.app.store.tg_api.send_keyboard(chat_id, MENU_BUTTONS, MENU_TEXT)
         return
@@ -318,6 +319,8 @@ async def _send_category_board(self, chat_id: int, message_id: int | None = None
         await self.app.store.tg_api.send_message(chat_id, "❌ Нет активной игры.")
         return
     
+    await asyncio.sleep(0.5)
+    
     answered_ids = await self.app.store.game.get_answered_question_ids(game.id) if game else set()
     current_categories = await self.app.store.game.get_game_categories(game.id)
     is_blitz = game.game_mode == GameModes.BLITZ.value
@@ -329,11 +332,14 @@ async def _send_category_board(self, chat_id: int, message_id: int | None = None
         await self.app.store.game.set_game_categories(game.id, [c.id for c in current_categories])
     
     categories = [c for c in current_categories if any(q.id not in answered_ids for q in c.questions)]
+    logger.logging.info(f"categories: {categories}")
 
     if not categories:
         next_round = game.current_round + 1 if game.current_round is not None else 1
+        logger.logging.info(f"next_round: {next_round}")
 
         if next_round >= 4 or (is_blitz and next_round == 2):
+            logger.logging.info(f"Переходим к финалу")
             await _start_final_round(self, chat_id, game.id)
             return
 
@@ -371,7 +377,7 @@ async def _announce_chooser(self, chat_id: int, choosing_user_id: int):
     name = user.display_name if user else f"ID:{choosing_user_id}"
     await self.app.store.tg_api.send_message(
         chat_id,
-        f"🎯 Ход игрока <b>{name}</b>. Выберите категорию и вопрос:",
+        f"🎯 Ход игрока <b>{name}</b>. Выберите категорию и вопрос за ⏱️ {GameTimers.CHOOSE_TIMEOUT.value} сек:",
     )
 
 
@@ -447,6 +453,7 @@ async def handle_category_click(self, chat_id, message_id, data, user_id: int):
 @router.callback(QuestionCallback)
 @ratelimit(seconds=5, scope="user_chat")
 async def handle_question_click(self, chat_id, message_id, data, user_id: int):
+    await asyncio.sleep(0.5)
     game = await self.app.store.game.get_active_game(chat_id)
     if not game or game.status != GameStatus.CHOOSING_QUESTION.value:
         return
@@ -457,7 +464,6 @@ async def handle_question_click(self, chat_id, message_id, data, user_id: int):
     if not question:
         return
 
-    from app.store.tg_api.game_constants import GameTimers
     self.cancel_timer(game.id)
 
     await self.app.store.game.update_game(
@@ -690,11 +696,6 @@ async def _start_final_round(self, chat_id: int, game_id: int):
     players = await self.app.store.game.get_players(game_id)
     eligible = [p for p in players if p.points > 0]
 
-    if len(eligible) < 1:
-        await self.app.store.tg_api.send_message(chat_id, "🏁 Финальный раунд невозможен — нет игроков с положительным счётом.")
-        await _finish_game(self, chat_id, game_id)
-        return
-
     # Kick players with <= 0 points
     for p in players:
         if p.points <= 0:
@@ -706,6 +707,7 @@ async def _start_final_round(self, chat_id: int, game_id: int):
     players = await self.app.store.game.get_players(game_id)
 
     if len(players) <= 1:
+        await self.app.store.tg_api.send_message(chat_id, "🏁 Финальный раунд невозможен — недостаточно игроков с положительным счётом.")
         await _finish_game(self, chat_id, game_id)
         return
 
@@ -1063,6 +1065,7 @@ async def _on_answer_button_timeout(self, game_id: int, chat_id: int, seconds: f
 
         # Restore previous chooser (stored before question was set)
         players = await self.app.store.game.get_players(game_id)
+        logger.logging.info(f"timer players: {players}")
         if not players:
             return
 
@@ -1074,7 +1077,17 @@ async def _on_answer_button_timeout(self, game_id: int, chat_id: int, seconds: f
             choosing_user_id=chooser_id,
             active_question_id=None,
         )
-        await _announce_chooser(self, chat_id, chooser_id)
+        
+        answered_ids = await self.app.store.game.get_answered_question_ids(game_id)
+        current_categories = await self.app.store.game.get_game_categories(game_id)
+        has_questions = any(
+            q.id not in answered_ids
+            for c in current_categories
+            for q in c.questions
+        )
+        if has_questions:
+            await _announce_chooser(self, chat_id, chooser_id)
+
         await _send_category_board(self, chat_id)
         self.schedule_choose_timer(game_id, chat_id)
 
@@ -1126,9 +1139,13 @@ async def _on_answering_timeout(self, game_id: int, chat_id: int, seconds: float
 @router.message("/hesoyam")
 @ratelimit(seconds=10, scope="user_chat")
 async def give_points(self, chat_id, user_id):
-    await self.app.store.user.give_points(user_id)
-    user = await self.app.store.user.get_user(user_id)
-    await self.app.store.tg_api.send_message(chat_id, f"ID:{user_id} Добавлены 10000 очков! Текущий счёт: {user.points}")
+    game = await self.app.store.game.get_active_game(chat_id)
+    if not game:
+        await self.app.store.tg_api.send_message(chat_id, "❌ Нет активной игры.")
+        return
+    
+    points = await self.app.store.user.update_player_points(game.id, user_id, 10000)
+    await self.app.store.tg_api.send_message(chat_id, f"ID:{user_id} Добавлены 10000 очков! Текущий счёт: {points}")
 
 @router.message("/next_round")
 async def handle_admin_next_round(self, chat_id: int, user_id: int):

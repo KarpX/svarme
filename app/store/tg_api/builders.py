@@ -35,8 +35,9 @@ RULES_TEXT = (
 )
 
 GAME_START_TEXT = "🎉 Игра началась!"\
-    f"\n{BotCommands.rules} – 📜 Правила"\
-    f"\n{BotCommands.surrender} – 🏳️ Сдаться"
+    f"\n{BotCommands.rules} – {BotButtons.rules}"\
+    f"\n{BotCommands.surrender} – {BotButtons.surrender}"\
+    f"\n{BotCommands.finish_game} – {BotButtons.finish_game}"
 
 MENU_BUTTONS = [
     [{"text": BotButtons.start_game}, {"text": BotButtons.statistics}],

@@ -66,7 +66,9 @@ class BotManager:
     def cancel_timer(self, game_id: int) -> None:
         task = self._timers.pop(game_id, None)
         if task and not task.done():
-            task.cancel()
+            current = asyncio.current_task()
+            if task is not current:
+                task.cancel()
 
     def schedule_choose_timer(self, game_id: int, chat_id: int) -> None:
         self.cancel_timer(game_id)

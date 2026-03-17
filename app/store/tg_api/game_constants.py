@@ -9,7 +9,7 @@ class BotButtons:
     surrender = "🏳️ Сдаться"
     finish_game = "🏁 Закончить игру"
 
-    exit_lobby = "⛓️‍💥 Выйти из лобби"
+    exit_lobby = "✂️ Выйти из лобби"
 
 
 class BotCommands:
