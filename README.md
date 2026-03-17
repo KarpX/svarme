@@ -6,8 +6,8 @@
 
 **Карпеев Максим Андреевич**
 
-[![Email](https://img.shields.io/badge/Email-your%40email.com-red?style=flat&logo=gmail)](mailto:carpeev.maksimka@yandex.ru)
-[![Telegram](https://img.shields.io/badge/Telegram-@username-2CA5E0?style=flat&logo=telegram)](https://t.me/KarpXer)
+[![Email](https://img.shields.io/badge/Email-carpeev.maksimka%40yandex.ru-red?style=flat&logo=gmail)](mailto:carpeev.maksimka@yandex.ru)
+[![Telegram](https://img.shields.io/badge/Telegram-@KarpXer-2CA5E0?style=flat&logo=telegram)](https://t.me/KarpXer)
 
 ---
 
