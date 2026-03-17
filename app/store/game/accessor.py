@@ -3,7 +3,19 @@ from typing import TYPE_CHECKING
 from sqlalchemy import delete, select, update
 from sqlalchemy.orm import selectinload
 
-from app.store.game.models import GameAnsweredQuestionsModel, GameCategoriesModel, GameFinalAnswerModel, GameFinalBetsModel, GameFinalRemovedCategoryModel, GameFinishVoteModel, GameModel, LobbyMessageModel, StatisticModel, UserModel
+from app.store.game.models import (
+    GameAnsweredQuestionsModel,
+    GameCategoriesModel,
+    GameFinalAnswerModel,
+    GameFinalBetsModel,
+    GameFinalRemovedCategoryModel,
+    GameFinishVoteModel,
+    GameModel,
+    GamePlayerModel,
+    LobbyMessageModel,
+    StatisticModel,
+    UserModel,
+)
 from app.store.quiz.models import CategoryModel, QuestionModel
 from app.web import logger
 
@@ -18,6 +30,8 @@ class GameAccessor:
     @property
     def _session(self):
         return self.store.app.database.sessionmaker
+
+    # ── Game CRUD ──────────────────────────────────────────────────────────
 
     async def create_game(self, chat_id: int, game_mode: str, game_type: str) -> GameModel:
         async with self._session() as session:
@@ -39,8 +53,8 @@ class GameAccessor:
                 .where(GameModel.status.notin_(["finished", "waiting", "pending"]))
             )
             return result.scalar_one_or_none()
-        
-    async def get_all_active_games(self) -> list[GameModel] | None:
+
+    async def get_all_active_games(self) -> list[GameModel]:
         async with self._session() as session:
             result = await session.execute(
                 select(GameModel)
@@ -55,38 +69,119 @@ class GameAccessor:
             )
             await session.commit()
 
+    # ── Players (game_players table) ───────────────────────────────────────
+
     async def add_player(self, user_id: int, game_id: int) -> None:
+        """Добавить игрока в игру (создать запись в game_players)."""
         async with self._session() as session:
-            await session.execute(
-                update(UserModel).where(UserModel.id == user_id).values(game_id=game_id, points=0)
+            # Не дублировать, если уже есть
+            existing = await session.execute(
+                select(GamePlayerModel)
+                .where(GamePlayerModel.game_id == game_id)
+                .where(GamePlayerModel.user_id == user_id)
             )
+            if existing.scalar_one_or_none():
+                return
+            session.add(GamePlayerModel(game_id=game_id, user_id=user_id, points=0))
             await session.commit()
 
-    async def get_players(self, game_id: int) -> list[UserModel]:
+    async def get_players(self, game_id: int) -> list[GamePlayerModel]:
+        """Вернуть список GamePlayerModel для игры."""
         async with self._session() as session:
             result = await session.execute(
-                select(UserModel).where(UserModel.game_id == game_id)
+                select(GamePlayerModel).where(GamePlayerModel.game_id == game_id)
             )
             return list(result.scalars().all())
 
     async def is_player(self, game_id: int, user_id: int) -> bool:
-        """Check whether user_id is a participant of game_id."""
         async with self._session() as session:
             result = await session.execute(
-                select(UserModel.id).where(
-                    UserModel.id == user_id,
-                    UserModel.game_id == game_id,
+                select(GamePlayerModel.id).where(
+                    GamePlayerModel.game_id == game_id,
+                    GamePlayerModel.user_id == user_id,
                 )
             )
             return result.scalar_one_or_none() is not None
 
-    async def remove_player(self, user_id: int) -> None:
-        """Detach user from current game (surrender)."""
+    async def remove_player(self, game_id: int, user_id: int) -> None:
+        """Удалить игрока из конкретной игры."""
         async with self._session() as session:
             await session.execute(
-                update(UserModel).where(UserModel.id == user_id).values(game_id=None)
+                delete(GamePlayerModel)
+                .where(GamePlayerModel.game_id == game_id)
+                .where(GamePlayerModel.user_id == user_id)
             )
             await session.commit()
+
+    async def update_player_points(self, game_id: int, user_id: int, delta: int) -> int:
+        """Изменить очки игрока в конкретной игре, вернуть новое значение."""
+        async with self._session() as session:
+            result = await session.execute(
+                select(GamePlayerModel)
+                .where(GamePlayerModel.game_id == game_id)
+                .where(GamePlayerModel.user_id == user_id)
+            )
+            player = result.scalar_one_or_none()
+            if player is None:
+                return 0
+            player.points += delta
+            await session.commit()
+            return player.points
+
+    async def get_player(self, game_id: int, user_id: int) -> GamePlayerModel | None:
+        """Получить запись игрока в конкретной игре."""
+        async with self._session() as session:
+            result = await session.execute(
+                select(GamePlayerModel)
+                .where(GamePlayerModel.game_id == game_id)
+                .where(GamePlayerModel.user_id == user_id)
+            )
+            return result.scalar_one_or_none()
+
+    async def get_player_active_game(self, user_id: int) -> GameModel | None:
+        """
+        Вернуть активную игру (не лобби, не finished), в которой участвует пользователь.
+        Нужно для финальных раундов (DM-ставки и ответы).
+        """
+        async with self._session() as session:
+            result = await session.execute(
+                select(GameModel)
+                .join(GamePlayerModel, GamePlayerModel.game_id == GameModel.id)
+                .where(GamePlayerModel.user_id == user_id)
+                .where(GameModel.status.notin_(["finished", "waiting", "pending"]))
+            )
+            return result.scalar_one_or_none()
+
+    # ── Statistics ─────────────────────────────────────────────────────────
+
+    async def update_statistics(self, players: list[GamePlayerModel], winner_id: int) -> None:
+        """Обновить статистику после окончания игры."""
+        async with self._session() as session:
+            for player in players:
+                result = await session.execute(
+                    select(StatisticModel).where(StatisticModel.user_id == player.user_id)
+                )
+                stat = result.scalar_one_or_none()
+                if stat is None:
+                    stat = StatisticModel(user_id=player.user_id)
+                    session.add(stat)
+
+                stat.games_played += 1
+                if player.points > stat.max_points:
+                    stat.max_points = player.points
+                if player.user_id == winner_id:
+                    stat.wins += 1
+
+            await session.commit()
+
+    async def get_user_statistics(self, user_id: int) -> StatisticModel | None:
+        async with self._session() as session:
+            result = await session.execute(
+                select(StatisticModel).where(StatisticModel.user_id == user_id)
+            )
+            return result.scalar_one_or_none()
+
+    # ── Answered questions ─────────────────────────────────────────────────
 
     async def add_answered_question(self, game_id: int, question_id: int) -> None:
         async with self._session() as session:
@@ -101,61 +196,150 @@ class GameAccessor:
             )
             return set(result.scalars().all())
 
-    async def update_player_points(self, user_id: int, delta: int) -> int:
-        """Add delta to user points, return new points value."""
+    # ── Categories ─────────────────────────────────────────────────────────
+
+    async def set_game_categories(self, game_id: int, category_ids: list[int]) -> None:
         async with self._session() as session:
-            result = await session.execute(
-                select(UserModel).where(UserModel.id == user_id)
+            await session.execute(
+                delete(GameCategoriesModel).where(GameCategoriesModel.game_id == game_id)
             )
-            user = result.scalar_one_or_none()
-            if user is None:
-                return 0
-            user.points += delta
+            for category_id in category_ids:
+                session.add(GameCategoriesModel(game_id=game_id, category_id=category_id))
             await session.commit()
-            return user.points
 
-    async def update_statistics(self, players: list[UserModel], winner_id: int) -> None:
-        """Update statistic table for all players after game ends."""
+    async def get_game_categories(self, game_id: int) -> list[CategoryModel]:
         async with self._session() as session:
-            for player in players:
-                result = await session.execute(
-                    select(StatisticModel).where(StatisticModel.user_id == player.id)
-                )
-                stat = result.scalar_one_or_none()
-                if stat is None:
-                    stat = StatisticModel(user_id=player.id)
-                    session.add(stat)
+            result = await session.execute(
+                select(CategoryModel)
+                .options(selectinload(CategoryModel.questions).joinedload(QuestionModel.category))
+                .join(GameCategoriesModel)
+                .where(GameCategoriesModel.game_id == game_id)
+            )
+            return result.scalars().all()
 
-                stat.games_played += 1
-                if player.points > stat.max_points:
-                    stat.max_points = player.points
-                if player.id == winner_id:
-                    stat.wins += 1
-
+    async def clear_game_categories(self, game_id: int) -> None:
+        async with self._session() as session:
+            await session.execute(
+                delete(GameCategoriesModel).where(GameCategoriesModel.game_id == game_id)
+            )
             await session.commit()
-    
-    async def get_user_statistics(self, user_id: int) -> StatisticModel | None:
-        async with self._session() as session:
-            result = await session.execute(
-                select(StatisticModel).where(StatisticModel.user_id == user_id)
-            )
-            return result.scalar_one_or_none()
 
-    async def get_player_active_game(self, user_id: int) -> GameModel | None:
-        """Return the active game the user is currently in (via user.game_id)."""
+    # ── Lobby (waiting / pending) ──────────────────────────────────────────
+
+    async def get_lobby_game(self, chat_id: int) -> GameModel | None:
         async with self._session() as session:
-            result = await session.execute(
-                select(UserModel).where(UserModel.id == user_id)
-            )
-            user = result.scalar_one_or_none()
-            if user is None or user.game_id is None:
-                return None
             result = await session.execute(
                 select(GameModel)
-                .where(GameModel.id == user.game_id)
-                .where(GameModel.status != "finished")
+                .where(GameModel.chat_id == chat_id)
+                .where(GameModel.status.in_(["waiting", "pending"]))
             )
             return result.scalar_one_or_none()
+
+    async def create_lobby(self, chat_id: int, user_id: int) -> GameModel:
+        async with self._session() as session:
+            game = GameModel(
+                chat_id=chat_id,
+                game_mode="",
+                game_type="group",
+                status="waiting",
+                choosing_user_id=user_id,
+            )
+            session.add(game)
+            await session.commit()
+            return game
+
+    async def get_lobby_players(self, chat_id: int) -> list[UserModel]:
+        """Вернуть UserModel игроков, которые сейчас в лобби данного чата."""
+        async with self._session() as session:
+            result = await session.execute(
+                select(UserModel)
+                .join(GamePlayerModel, GamePlayerModel.user_id == UserModel.id)
+                .join(GameModel, GamePlayerModel.game_id == GameModel.id)
+                .where(GameModel.chat_id == chat_id)
+                .where(GameModel.status.in_(["waiting", "pending"]))
+            )
+            return list(result.scalars().all())
+
+    async def add_lobby_player(self, chat_id: int, user_id: int) -> GameModel:
+        """Добавить игрока в лобби, создав его при необходимости."""
+        game = await self.get_lobby_game(chat_id)
+        if not game:
+            game = await self.create_lobby(chat_id, user_id)
+        await self.add_player(user_id, game.id)
+        return game
+
+    async def remove_lobby_player(self, chat_id: int, user_id: int) -> None:
+        """Убрать игрока из лобби."""
+        async with self._session() as session:
+            game = await self.get_lobby_game(chat_id)
+            if not game:
+                return
+
+            # Сначала ищем следующего владельца (ДО удаления игрока из сессии)
+            next_admin = None
+            if game.choosing_user_id == user_id:
+                result = await session.execute(
+                    select(GamePlayerModel.user_id)
+                    .where(GamePlayerModel.game_id == game.id)
+                    .where(GamePlayerModel.user_id != user_id)
+                )
+                next_admin = result.scalars().first()
+
+            # Теперь удаляем игрока
+            await session.execute(
+                delete(GamePlayerModel)
+                .where(GamePlayerModel.game_id == game.id)
+                .where(GamePlayerModel.user_id == user_id)
+            )
+
+            # Обновляем или удаляем лобби
+            if game.choosing_user_id == user_id:
+                if next_admin:
+                    await session.execute(
+                        update(GameModel)
+                        .where(GameModel.id == game.id)
+                        .values(choosing_user_id=next_admin)
+                    )
+                else:
+                    # Лобби пустое — удалить игру (cascade удалит lobby_messages и game_players)
+                    await session.execute(
+                        delete(GameModel).where(GameModel.id == game.id)
+                    )
+
+            await session.commit()
+
+    # ── Lobby messages ─────────────────────────────────────────────────────
+
+    async def add_lobby_messages(self, game_id: int, message_id: int):
+        if not message_id:
+            return
+        async with self._session() as session:
+            exists = await session.execute(
+                select(LobbyMessageModel).where(
+                    LobbyMessageModel.game_id == game_id,
+                    LobbyMessageModel.message_id == message_id,
+                )
+            )
+            if not exists.scalar():
+                session.add(LobbyMessageModel(game_id=game_id, message_id=message_id))
+                await session.commit()
+
+    async def get_lobby_messages(self, game_id: int) -> list[int]:
+        async with self._session() as session:
+            result = await session.execute(
+                select(LobbyMessageModel.message_id)
+                .where(LobbyMessageModel.game_id == game_id)
+            )
+            return list(result.scalars().all())
+
+    async def clear_lobby_messages(self, game_id: int):
+        async with self._session() as session:
+            await session.execute(
+                delete(LobbyMessageModel).where(LobbyMessageModel.game_id == game_id)
+            )
+            await session.commit()
+
+    # ── Final round ────────────────────────────────────────────────────────
 
     async def create_final_bet(self, game_id: int, user_id: int) -> None:
         async with self._session() as session:
@@ -187,133 +371,6 @@ class GameAccessor:
                 .where(GameFinalBetsModel.user_id == user_id)
             )
             return result.scalar_one_or_none()
-        
-    async def set_game_categories(self, game_id: int, category_ids: list[int]) -> None:
-        async with self._session() as session:
-            await session.execute(
-                delete(GameCategoriesModel).where(GameCategoriesModel.game_id == game_id)
-            )
-
-            for category_id in category_ids:
-                game_category = GameCategoriesModel(game_id=game_id, category_id=category_id)
-                session.add(game_category)
-            await session.commit()
-
-    async def get_game_categories(self, game_id: int) -> list[CategoryModel]:
-        async with self._session() as session:
-            result = await session.execute(
-                select(CategoryModel)
-                .options(selectinload(CategoryModel.questions).joinedload(QuestionModel.category))
-                .join(GameCategoriesModel)
-                .where(GameCategoriesModel.game_id == game_id)
-            )
-            return result.scalars().all()
-        
-    async def clear_game_categories(self, game_id: int) -> None:
-        async with self._session() as session:
-            await session.execute(
-                delete(GameCategoriesModel).where(GameCategoriesModel.game_id == game_id)
-            )
-            await session.commit()
-
-    # ── Lobby (waiting / pending) ──────────────────────────────────────────
-
-    async def get_lobby_game(self, chat_id: int) -> GameModel | None:
-        """Return the active waiting/pending lobby game for a chat, if any."""
-        async with self._session() as session:
-            result = await session.execute(
-                select(GameModel)
-                .where(GameModel.chat_id == chat_id)
-                .where(GameModel.status.in_(["waiting", "pending"]))
-            )
-            return result.scalar_one_or_none()
-
-    async def create_lobby(self, chat_id: int, user_id: int) -> GameModel:
-        """Create a waiting lobby game (no mode yet)."""
-        async with self._session() as session:
-            game = GameModel(chat_id=chat_id, game_mode="", game_type="group", status="waiting", choosing_user_id=user_id)
-            session.add(game)
-            await session.commit()
-            return game
-
-    async def get_lobby_players(self, chat_id: int) -> list[UserModel]:
-        """Return users currently in the waiting/pending lobby for this chat."""
-        async with self._session() as session:
-            result = await session.execute(
-                select(UserModel)
-                .join(GameModel, UserModel.game_id == GameModel.id)
-                .where(GameModel.chat_id == chat_id)
-                .where(GameModel.status.in_(["waiting", "pending"]))
-            )
-            return list(result.scalars().all())
-
-    async def add_lobby_player(self, chat_id: int, user_id: int) -> GameModel:
-        """Add user to waiting lobby, creating it if needed. Returns the lobby game."""
-        game = await self.get_lobby_game(chat_id)
-        if not game:
-            game = await self.create_lobby(chat_id, user_id)
-        await self.add_player(user_id, game.id)
-        return game
-
-    async def remove_lobby_player(self, chat_id: int, user_id: int) -> None:
-        """Remove user from lobby (detach game_id)."""
-        async with self._session() as session:
-            game = await self.get_lobby_game(chat_id)
-            if not game:
-                return
-
-            await session.execute(
-                update(UserModel).where(UserModel.id == user_id).values(game_id=None)
-            )
-
-            if game and game.choosing_user_id == user_id:
-                result = await session.execute(
-                    select(UserModel).where(UserModel.game_id == game.id and UserModel.id != user_id)
-                )
-                next_admin = result.scalars().all()
-
-                if next_admin:
-                    game.choosing_user_id = next_admin[0].id
-                    await session.execute(
-                        update(GameModel)
-                        .where(GameModel.id == game.id)
-                        .values(choosing_user_id=next_admin[0].id)
-                    )
-                else:
-                    await session.delete(game)
-            await session.commit()
-
-    async def add_lobby_messages(self, game_id: int, message_id: int):
-        if not message_id:
-            return
-        
-        async with self._session() as session:
-            exists = await session.execute(
-            select(LobbyMessageModel).where(
-                LobbyMessageModel.game_id == game_id,
-                LobbyMessageModel.message_id == message_id
-                )
-            )
-            if not exists.scalar():
-                session.add(LobbyMessageModel(game_id=game_id, message_id=message_id))
-                await session.commit()
-
-    async def get_lobby_messages(self, game_id: int) -> list[int]:
-        async with self._session() as session:
-            result = await session.execute(
-                select(LobbyMessageModel.message_id)
-                .where(LobbyMessageModel.game_id == game_id)
-            )
-            return list(result.scalars().all())
-        
-    async def clear_lobby_messages(self, game_id: int):
-        async with self._session() as session:
-            await session.execute(
-                delete(LobbyMessageModel).where(LobbyMessageModel.game_id == game_id)
-            )
-            await session.commit()
-
-    # ── Final round helpers ────────────────────────────────────────────────
 
     async def add_final_removed_category(self, game_id: int, category_id: int) -> None:
         async with self._session() as session:
@@ -379,25 +436,22 @@ class GameAccessor:
             )
             await session.commit()
 
-    # ----------------- ADMIN ----------------
+    # ── Admin ──────────────────────────────────────────────────────────────
 
     async def skip_current_round_questions(self, game_id: int):
         async with self._session() as session:
-            # Получаем все ID вопросов из категорий, которые сейчас привязаны к игре
             categories = await self.get_game_categories(game_id)
             for cat in categories:
                 for q in cat.questions:
-                    # Добавляем их в отвеченные, если их там еще нет
                     exists = await session.execute(
                         select(GameAnsweredQuestionsModel).where(
                             GameAnsweredQuestionsModel.game_id == game_id,
-                            GameAnsweredQuestionsModel.question_id == q.id
+                            GameAnsweredQuestionsModel.question_id == q.id,
                         )
                     )
                     if not exists.scalar():
                         session.add(GameAnsweredQuestionsModel(game_id=game_id, question_id=q.id))
-            
-            # Очищаем привязку категорий, чтобы _send_category_board сгенерировал новые
+
             await session.execute(
                 delete(GameCategoriesModel).where(GameCategoriesModel.game_id == game_id)
             )

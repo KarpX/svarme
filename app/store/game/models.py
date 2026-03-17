@@ -9,10 +9,8 @@ class UserModel(Base):
     __tablename__ = "user"
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, unique=True)
-    game_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("game.id", ondelete="SET NULL"), nullable=True)
     username: Mapped[str | None] = mapped_column(String(255), nullable=True)
     first_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    points: Mapped[int] = mapped_column(default=0)
 
     statistic: Mapped["StatisticModel"] = relationship(back_populates="user", uselist=False)
 
@@ -54,6 +52,24 @@ class GameModel(Base):
     remaining_seconds: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     lobby_messages: Mapped[list["LobbyMessageModel"]] = relationship(backref="game", cascade="all, delete-orphan")
+    players: Mapped[list["GamePlayerModel"]] = relationship(back_populates="game", cascade="all, delete-orphan")
+
+
+class GamePlayerModel(Base):
+    """
+    Игрок в конкретной игре. Один пользователь может быть в нескольких играх одновременно.
+    Очки хранятся здесь, а не в UserModel.
+    """
+    __tablename__ = "game_players"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    game_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("game.id", ondelete="CASCADE"), nullable=False)
+    user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("user.id", ondelete="CASCADE"), nullable=False)
+    points: Mapped[int] = mapped_column(Integer, default=0)
+
+    game: Mapped["GameModel"] = relationship(back_populates="players")
+    user: Mapped["UserModel"] = relationship()
+
 
 class LobbyMessageModel(Base):
     __tablename__ = "lobby_messages"

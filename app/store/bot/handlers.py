@@ -24,7 +24,7 @@ from app.web.utils import ratelimit
 router = BotRouter()
 
 @router.message("/start")
-@ratelimit(seconds=10)
+@ratelimit(seconds=10, scope="user")
 async def handle_start(self, chat_id: int, user_id: int):
     await self.app.store.tg_api.send_message(chat_id, "👋 Добро пожаловать в Svarme!")
     await self.app.store.tg_api.send_keyboard(chat_id, MENU_BUTTONS, MENU_TEXT)
@@ -96,7 +96,7 @@ async def _send_lobby(self, chat_id: int, user_id: int, message_id: int = None):
 
 
 @router.message(BotCommands.start_game, BotButtons.start_game, BotCommands.start_game + "@SvarMeBot")
-@ratelimit(seconds=1)
+@ratelimit(seconds=3, scope="user_chat")
 async def handle_start_game(self, chat_id: int, user_id: int, message_id = None):
     # Check if game already running in this chat
     active = await self.app.store.game.get_active_game(chat_id)
@@ -106,11 +106,6 @@ async def handle_start_game(self, chat_id: int, user_id: int, message_id = None)
 
     user = await self.app.store.user.get_or_create_user(user_id)
     user_name = user.display_name if user else f"ID:{user_id}"
-
-    current_game = await self.app.store.game.get_player_active_game(user_id)
-    if current_game:
-        await self.app.store.tg_api.send_message(chat_id, f"❌ {user_name}, ты уже играешь в другом чате! {current_game.id}")
-        return
 
     lobby_players = await self.app.store.game.get_lobby_players(chat_id)
     if any(p.id == user_id for p in lobby_players):
@@ -131,7 +126,7 @@ async def handle_start_game(self, chat_id: int, user_id: int, message_id = None)
     
 
 @router.message(BotCommands.exit_lobby, BotCommands.exit_lobby + "@SvarMeBot")
-@ratelimit(seconds=5)
+@ratelimit(seconds=3, scope="user_chat")
 async def handle_exit_lobby(self, chat_id: int, user_id: int, message_id = None):
     game = await self.app.store.game.get_active_game(chat_id)
     if game:
@@ -151,20 +146,22 @@ async def handle_exit_lobby(self, chat_id: int, user_id: int, message_id = None)
     await self.app.store.game.remove_lobby_player(chat_id, user_id)
 
     players = await self.app.store.game.get_lobby_players(chat_id)
-    
+
     if not players or len(players) < 1:
         for msg in lobby_msg_ids:
             try:
                 await self.app.store.tg_api.delete_message(chat_id, msg)
             except Exception:
                 pass
+        await self.app.store.game.clear_lobby_messages(lobby.id)
 
     await self.app.store.tg_api.send_keyboard(chat_id, MENU_BUTTONS, f"💨 {user_name} вышел из лобби!")
 
-    await _send_lobby(self, chat_id, user_id, message_id)
+    if len(players) >= 1:
+        await _send_lobby(self, chat_id, user_id, message_id)
 
 @router.message(BotCommands.stats, BotButtons.statistics, BotCommands.stats + "@SvarMeBot")
-@ratelimit(seconds=10)
+@ratelimit(seconds=10, scope="user")
 async def handle_stats(self, chat_id: int, user_id: int):
     user = await self.app.store.user.get_user(user_id)
     if not user:
@@ -184,17 +181,17 @@ async def handle_stats(self, chat_id: int, user_id: int):
     )
 
 @router.message(BotCommands.rules, BotButtons.rules, BotCommands.rules + "@SvarMeBot")
-@ratelimit(seconds=10)
+@ratelimit(seconds=10, scope="user")
 async def handle_rules(self, chat_id: int, user_id: int):
     await self.app.store.tg_api.send_message(chat_id, RULES_TEXT)
 
 @router.message(BotCommands.menu, BotButtons.menu, BotCommands.menu + "@SvarMeBot")
-@ratelimit(seconds=2)
+@ratelimit(seconds=5, scope="user")
 async def handle_menu(self, chat_id: int, user_id: int):
     await self.app.store.tg_api.send_keyboard(chat_id, MENU_BUTTONS, MENU_TEXT)
 
 @router.message(BotCommands.finish_game, BotButtons.finish_game, BotCommands.finish_game + "@SvarMeBot")
-@ratelimit(seconds=10)
+@ratelimit(seconds=10, scope="user_chat")
 async def handle_finish_game(self, chat_id: int, user_id: int):
     game = await self.app.store.game.get_active_game(chat_id)
     if not game:
@@ -230,7 +227,7 @@ async def handle_finish_game(self, chat_id: int, user_id: int):
 
         for p in players:
             if p.points <= 0:
-                await self.app.store.game.remove_player(p.id)
+                await self.app.store.game.remove_player(game_id, p.user_id)
 
         await _finish_game(self, chat_id, game_id)
     else:
@@ -265,15 +262,15 @@ async def _finish_game(self, chat_id: int, game_id: int):
 
     sorted_players = sorted(players, key=lambda p: p.points, reverse=True)
     winner = sorted_players[0]
-    winner_user = await self.app.store.user.get_user(winner.id)
-    winner_name = winner_user.display_name if winner_user else f"ID:{winner.id}"
+    winner_user = await self.app.store.user.get_user(winner.user_id)
+    winner_name = winner_user.display_name if winner_user else f"ID:{winner.user_id}"
 
-    await self.app.store.game.update_statistics(players, winner.id)
+    await self.app.store.game.update_statistics(players, winner.user_id)
 
     lines = ["🏁 <b>Игра завершена!</b>\n\n📊 Итоговые результаты:"]
     for i, p in enumerate(sorted_players, start=1):
-        p_user = await self.app.store.user.get_user(p.id)
-        p_name = p_user.display_name if p_user else f"ID:{p.id}"
+        p_user = await self.app.store.user.get_user(p.user_id)
+        p_name = p_user.display_name if p_user else f"ID:{p.user_id}"
         medal = {1: "🥇", 2: "🥈", 3: "🥉"}.get(i, f"{i}.")
         lines.append(f"{medal} {p_name} — <b>{p.points}</b> очков")
     lines.append(f"\n🏆 Победитель: <b>{winner_name}</b> с {winner.points} очками!")
@@ -283,7 +280,7 @@ async def _finish_game(self, chat_id: int, game_id: int):
 
 
 @router.message(BotCommands.surrender, BotButtons.surrender, BotCommands.surrender + "@SvarMeBot")
-@ratelimit(seconds=60)
+@ratelimit(seconds=60, scope="user_chat")
 async def handle_surrender(self, chat_id: int, user_id: int):
     game = await self.app.store.game.get_active_game(chat_id)
     if not game:
@@ -297,7 +294,7 @@ async def handle_surrender(self, chat_id: int, user_id: int):
     user_name = user.display_name if user else f"ID:{user_id}"
 
     # Remove the surrendering player from the game
-    await self.app.store.game.remove_player(user_id)
+    await self.app.store.game.remove_player(game.id, user_id)
     await self.app.store.tg_api.send_message(chat_id, f"🏳 Игрок {user_name} сдался!")
 
     remaining = await self.app.store.game.get_players(game.id)
@@ -307,7 +304,7 @@ async def handle_surrender(self, chat_id: int, user_id: int):
         # If the surrendering player was the chooser, pass turn to someone else
         if game.choosing_user_id == user_id:
             self.cancel_timer(game.id)
-            new_chooser = remaining[0].id
+            new_chooser = remaining[0].user_id
             await self.app.store.game.update_game(game.id, choosing_user_id=new_chooser, status=GameStatus.CHOOSING_QUESTION.value)
             await _announce_chooser(self, chat_id, new_chooser)
             await _send_category_board(self, chat_id)
@@ -348,8 +345,8 @@ async def _send_category_board(self, chat_id: int, message_id: int | None = None
         players = await self.app.store.game.get_players(game.id)
         score_lines = []
         for p in players:
-            p_user = await self.app.store.user.get_user(p.id)
-            p_name = p_user.display_name if p_user else f"ID:{p.id}"
+            p_user = await self.app.store.user.get_user(p.user_id)
+            p_name = p_user.display_name if p_user else f"ID:{p.user_id}"
             score_lines.append(f"{p_name} — {p.points} очков")
         await self.app.store.tg_api.send_message(
             chat_id,
@@ -379,7 +376,7 @@ async def _announce_chooser(self, chat_id: int, choosing_user_id: int):
 
 
 @router.callback(GameModeCallback)
-@ratelimit(seconds=1)
+@ratelimit(seconds=5, scope="user_chat")
 async def handle_game_mode_click(self, chat_id, message_id, data, user_id: int):
     lobby_players = await self.app.store.game.get_lobby_players(chat_id)
     if not lobby_players or len(lobby_players) < 2:
@@ -425,7 +422,7 @@ async def handle_game_mode_click(self, chat_id, message_id, data, user_id: int):
 
 
 @router.callback(CategoryCallback)
-@ratelimit(seconds=1)
+@ratelimit(seconds=1, scope="user_chat")
 async def handle_category_click(self, chat_id, message_id, data, user_id: int):
     game = await self.app.store.game.get_active_game(chat_id)
     if not game or game.status != GameStatus.CHOOSING_QUESTION.value:
@@ -448,7 +445,7 @@ async def handle_category_click(self, chat_id, message_id, data, user_id: int):
 
 
 @router.callback(QuestionCallback)
-@ratelimit(seconds=2)
+@ratelimit(seconds=5, scope="user_chat")
 async def handle_question_click(self, chat_id, message_id, data, user_id: int):
     game = await self.app.store.game.get_active_game(chat_id)
     if not game or game.status != GameStatus.CHOOSING_QUESTION.value:
@@ -490,7 +487,7 @@ async def handle_question_click(self, chat_id, message_id, data, user_id: int):
 
 
 @router.callback(AnswerCallback)
-@ratelimit(seconds=5)
+@ratelimit(seconds=2, scope="user_chat")
 async def handle_answer_button_click(self, chat_id, message_id, data, user_id: int):
     user = await self.app.store.user.get_user(user_id)
     name = user.display_name if user else f"ID:{user_id}"
@@ -528,7 +525,7 @@ async def handle_answer_button_click(self, chat_id, message_id, data, user_id: i
 
 
 @router.callback(BackCallback)
-@ratelimit(seconds=1)
+@ratelimit(seconds=1, scope="user_chat")
 async def handle_back_click(self, chat_id, message_id, data, user_id: int):
     game = await self.app.store.game.get_active_game(chat_id)
     if game and game.choosing_user_id != user_id:
@@ -537,7 +534,7 @@ async def handle_back_click(self, chat_id, message_id, data, user_id: int):
 
 
 @router.callback(StartGameCallback)
-@ratelimit(seconds=2)
+@ratelimit(seconds=2, scope="user_chat")
 async def handle_start_game_click(self, chat_id, message_id, data, user_id: int):
     lobby_players = await self.app.store.game.get_lobby_players(chat_id)
     user = await self.app.store.user.get_user(user_id)
@@ -569,6 +566,8 @@ async def handle_start_game_click(self, chat_id, message_id, data, user_id: int)
         except Exception:
             pass
 
+        await self.app.store.game.clear_lobby_messages(lobby.id)
+
     await self.app.store.game.update_game(lobby.id, status="pending")
 
     await self.app.store.tg_api.send_inline_keyboard(
@@ -577,19 +576,19 @@ async def handle_start_game_click(self, chat_id, message_id, data, user_id: int)
 
 
 @router.callback(ExitLobbyCallback)
-@ratelimit(seconds=1)
+@ratelimit(seconds=2, scope="user_chat")
 async def handle_exit_lobby_click(self, chat_id: int, message_id: int, data, user_id: int):
     await handle_exit_lobby(self, chat_id, user_id, message_id)
 
 
 @router.callback(JoinLobbyCallback)
-@ratelimit(seconds=1)
+@ratelimit(seconds=2, scope="user_chat")
 async def handle_join_lobby_click(self, chat_id: int, message_id: int, data, user_id: int):
     await handle_start_game(self, chat_id, user_id, message_id)
 
 
 @router.callback(FinishGameCallback)
-@ratelimit(seconds=2)
+@ratelimit(seconds=2, scope="user_chat")
 async def handle_finish_game_click(self, chat_id: int, message_id: int, data, user_id: int):
     await handle_finish_game(self, chat_id, user_id)
 
@@ -627,7 +626,7 @@ async def handle_answer_message(self, chat_id: int, user_id: int, text: str):
         await self.app.store.user.increment_correct_answers(user_id)
 
         await self.app.store.game.add_answered_question(game.id, question.id)
-        new_points = await self.app.store.game.update_player_points(user_id, question.price)
+        new_points = await self.app.store.game.update_player_points(game.id, user_id, question.price)
         await self.app.store.tg_api.send_message(
             chat_id,
             f'✅ Верно! Ответ: {question.answer[0]}\n'
@@ -642,7 +641,7 @@ async def handle_answer_message(self, chat_id: int, user_id: int, text: str):
             await self.app.store.game.update_game(
                 game.id,
                 status=GameStatus.CHOOSING_QUESTION.value,
-                choosing_user_id=weakest_player.id,
+                choosing_user_id=weakest_player.user_id,
                 active_question_id=None,
             )
             await _send_category_board(self, chat_id)
@@ -663,7 +662,7 @@ async def handle_answer_message(self, chat_id: int, user_id: int, text: str):
         # Wrong answer — resume remaining time on answer button
         from app.store.tg_api.game_constants import GameTimers
         logger.logging.info(f"INCORRECT ANSWER {text}")
-        new_points = await self.app.store.game.update_player_points(user_id, -question.price)
+        new_points = await self.app.store.game.update_player_points(game.id, user_id, -question.price)
         await self.app.store.tg_api.send_message(
             chat_id,
             f"❌ Неверно! Ответ игрока {user_name}: «{text.replace('>', '').replace('<', '')}»\n"
@@ -699,9 +698,9 @@ async def _start_final_round(self, chat_id: int, game_id: int):
     # Kick players with <= 0 points
     for p in players:
         if p.points <= 0:
-            await self.app.store.game.remove_player(p.id)
-            p_user = await self.app.store.user.get_user(p.id)
-            p_name = p_user.display_name if p_user else f"ID:{p.id}"
+            await self.app.store.game.remove_player(game_id, p.user_id)
+            p_user = await self.app.store.user.get_user(p.user_id)
+            p_name = p_user.display_name if p_user else f"ID:{p.user_id}"
             await self.app.store.tg_api.send_message(chat_id, f"😢 {p_name} выбывает из финала (очки ≤ 0).")
 
     players = await self.app.store.game.get_players(game_id)
@@ -712,7 +711,7 @@ async def _start_final_round(self, chat_id: int, game_id: int):
 
     # Initialise final bet rows
     for p in eligible:
-        await self.app.store.game.create_final_bet(game_id, p.id)
+        await self.app.store.game.create_final_bet(game_id, p.user_id)
 
     # Fetch round-4 categories
     categories = await self.app.store.quiz.get_random_categories_for_round(4)
@@ -727,13 +726,13 @@ async def _start_final_round(self, chat_id: int, game_id: int):
         game_id,
         status=GameStatus.FINAL_REMOVING.value,
         current_round=4,
-        choosing_user_id=first_remover.id,
+        choosing_user_id=first_remover.user_id,
     )
 
     player_lines = []
     for p in eligible:
-        p_user = await self.app.store.user.get_user(p.id)
-        p_name = p_user.display_name if p_user else f"ID:{p.id}"
+        p_user = await self.app.store.user.get_user(p.user_id)
+        p_name = p_user.display_name if p_user else f"ID:{p.user_id}"
         player_lines.append(f"• {p_name} — {p.points} очков")
 
     await self.app.store.tg_api.send_message(
@@ -770,7 +769,7 @@ async def _send_final_category_board(self, chat_id: int, game_id: int, message_i
 
 
 @router.callback(FinalCategoryCallback)
-@ratelimit(seconds=2)
+@ratelimit(seconds=2, scope="user_chat")
 async def handle_final_category_remove(self, chat_id: int, message_id: int, data, user_id: int):
     game = await self.app.store.game.get_active_game(chat_id)
     if not game or game.status != GameStatus.FINAL_REMOVING.value:
@@ -795,7 +794,7 @@ async def handle_final_category_remove(self, chat_id: int, message_id: int, data
 
     # Advance to next remover
     players = await self.app.store.game.get_players(game_id)
-    player_ids = [p.id for p in players]
+    player_ids = [p.user_id for p in players]
     current_idx = player_ids.index(user_id) if user_id in player_ids else 0
     next_remover = player_ids[(current_idx + 1) % len(player_ids)]
     await self.app.store.game.update_game(game_id, choosing_user_id=next_remover)
@@ -831,7 +830,7 @@ async def _start_final_betting(self, chat_id: int, game_id: int, final_category)
     for p in players:
         # In Telegram, private chat_id == user_id
         await self.app.store.tg_api.send_message(
-            p.id,
+            p.user_id,
             f"🏁 <b>Финальный раунд!</b>\n"
             f"Ваши очки: <b>{p.points}</b>\n\n"
             f"Введите вашу ставку (от 1 до {p.points}):",
@@ -851,8 +850,8 @@ async def handle_final_bet_message(self, user_id: int, text: str):
         await self.app.store.tg_api.send_message(user_id, "❌ Пожалуйста, введите число.")
         return
 
-    user = await self.app.store.user.get_user(user_id)
-    max_bet = user.points if user else 0
+    player = await self.app.store.game.get_player(game.id, user_id)
+    max_bet = player.points if player else 0
     if bet <= 0 or bet > max_bet:
         await self.app.store.tg_api.send_message(user_id, f"❌ Ставка должна быть от 1 до {max_bet}.")
         return
@@ -892,7 +891,7 @@ async def _start_final_answering(self, chat_id: int, game_id: int):
 
     for p in players:
         await self.app.store.tg_api.send_message(
-            p.id,
+            p.user_id,
             f"❓ <b>Финальный вопрос</b>\n"
             f"Категория: <b>{question.category.name}</b>\n\n"
             f"{question.text}\n\n"
@@ -945,21 +944,21 @@ async def _reveal_final(self, chat_id: int, game_id: int):
     )
 
     for p in sorted_players:
-        p_user = await self.app.store.user.get_user(p.id)
-        p_name = p_user.display_name if p_user else f"ID:{p.id}"
-        bet = bets_by_user.get(p.id, 0) or 0
-        player_answer = answers.get(p.id, "")
+        p_user = await self.app.store.user.get_user(p.user_id)
+        p_name = p_user.display_name if p_user else f"ID:{p.user_id}"
+        bet = bets_by_user.get(p.user_id, 0) or 0
+        player_answer = answers.get(p.user_id, "")
         is_correct = player_answer.strip().lower() in [ans.strip().lower() for ans in question.answer]
 
         if not is_correct:
             is_correct = await self.app.store.quiz.llm.check_answer(question.text, question.answer, player_answer)
 
         if is_correct:
-            new_points = await self.app.store.game.update_player_points(p.id, bet)
+            new_points = await self.app.store.game.update_player_points(game_id, p.user_id, bet)
             result_icon = "✅"
             delta_text = f"+{bet}"
         else:
-            new_points = await self.app.store.game.update_player_points(p.id, -bet)
+            new_points = await self.app.store.game.update_player_points(game_id, p.user_id, -bet)
             result_icon = "❌"
             delta_text = f"-{bet}"
 
@@ -1068,7 +1067,7 @@ async def _on_answer_button_timeout(self, game_id: int, chat_id: int, seconds: f
             return
 
         # Find player with least points as new chooser (same logic as after correct answer)
-        chooser_id = min(players, key=lambda p: p.points).id
+        chooser_id = min(players, key=lambda p: p.points).user_id
         await self.app.store.game.update_game(
             game_id,
             status=GameStatus.CHOOSING_QUESTION.value,
@@ -1100,7 +1099,7 @@ async def _on_answering_timeout(self, game_id: int, chat_id: int, seconds: float
         timed_out_user = await self.app.store.user.get_user(game.choosing_user_id)
         timed_out_name = timed_out_user.display_name if timed_out_user else f"ID:{game.choosing_user_id}"
 
-        new_points = await self.app.store.game.update_player_points(game.choosing_user_id, -question.price)
+        new_points = await self.app.store.game.update_player_points(game_id, game.choosing_user_id, -question.price)
         await self.app.store.game.add_answered_question(game_id, question.id)
 
         await self.app.store.tg_api.send_message(
@@ -1125,7 +1124,7 @@ async def _on_answering_timeout(self, game_id: int, chat_id: int, seconds: float
 # ───────────────────────── ADMIN ─────────────────────────
 
 @router.message("/hesoyam")
-@ratelimit(seconds=10)
+@ratelimit(seconds=10, scope="user_chat")
 async def give_points(self, chat_id, user_id):
     await self.app.store.user.give_points(user_id)
     user = await self.app.store.user.get_user(user_id)

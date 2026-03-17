@@ -1,9 +1,9 @@
 from enum import Enum
 
 class BotButtons:
-    start_game = "🚀 Начать игру"
+    start_game = "🎮 Начать игру"
     statistics = "🏆 Статистика"
-    rules = "📜 Правила"
+    rules = "📖 Правила"
     menu = "☰ Меню"
 
     surrender = "🏳️ Сдаться"
