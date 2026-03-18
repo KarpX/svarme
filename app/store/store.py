@@ -1,7 +1,6 @@
 import typing
 
 from app.store.database.database import Database
-from app.store.redis.accessor import RedisAccessor
 
 if typing.TYPE_CHECKING:
     from app.web.app import Application
@@ -10,12 +9,15 @@ if typing.TYPE_CHECKING:
 async def _on_startup(app: "Application"):
     await app.database.connect()
     await app.store.redis.connect(app)
+    await app.store.rabbit.connect()
     await app.store.tg_api.connect()
     await app.store.bot.restore_timers()
+    await app.store.rabbit.start_consuming(app.store.bot.handle_update)
     app.store.poller.start()
 
 async def _on_cleanup(app: "Application"):
     await app.store.poller.stop()
+    await app.store.rabbit.disconnect()
     await app.store.tg_api.disconnect()
     await app.store.redis.disconnect(app)
     await app.database.disconnect()
@@ -30,6 +32,8 @@ class Store:
 
         from app.store.quiz.accessor import QuizAccessor
         from app.store.game.accessor import GameAccessor
+        from app.store.rabbit.accessor import RabbitAccessor
+        from app.store.redis.accessor import RedisAccessor
 
         self.quiz = QuizAccessor(self)
         self.game = GameAccessor(self)
@@ -38,6 +42,7 @@ class Store:
         self.bot = BotManager(app)
         self.poller = Poller(app)
         self.redis = RedisAccessor(app)
+        self.rabbit = RabbitAccessor(app)
 
 def setup_store(app: "Application") -> None:
     app.database = Database(app)

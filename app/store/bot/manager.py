@@ -2,6 +2,7 @@ import asyncio
 
 from app.store.bot.handlers import (
     handle_answer_message,
+    handle_cat_in_bag_answer,
     handle_final_answer_message,
     handle_final_bet_message,
     router,
@@ -62,6 +63,20 @@ class BotManager:
                     else:
                         seconds_left = GameTimers.ANSWERING_TIMEOUT.value
                     self.schedule_answering_timer(game_id, chat_id, seconds_left)
+                    
+            elif game.status == GameStatus.CAT_IN_BAG.value:
+                # target_user_id обязан ответить — восстанавливаем таймер на ввод ответа
+                if game.remaining_seconds is not None:
+                    seconds_left = max(float(game.remaining_seconds), 5.0)
+                elif game.question_asked_at:
+                    asked_at = (game.question_asked_at.replace(tzinfo=timezone.utc)
+                                if game.question_asked_at.tzinfo is None
+                                else game.question_asked_at)
+                    elapsed = (now - asked_at).total_seconds()
+                    seconds_left = max(GameTimers.ANSWERING_TIMEOUT.value - elapsed, 5.0)
+                else:
+                    seconds_left = GameTimers.ANSWERING_TIMEOUT.value
+                self.schedule_answering_timer(game_id, chat_id, seconds_left)
 
     def cancel_timer(self, game_id: int) -> None:
         task = self._timers.pop(game_id, None)
@@ -96,6 +111,23 @@ class BotManager:
             _on_answering_timeout(self, game_id, chat_id, seconds_left)
         )
 
+    async def _is_cat_in_bag_target(self, chat_id: int, user_id: int) -> bool:
+        """Return True if the game is in cat_in_bag state and this user is the target."""
+        game = await self.app.store.game.get_active_game(chat_id)
+        return (
+            game is not None
+            and game.status == GameStatus.CAT_IN_BAG.value
+            and game.target_user_id == user_id
+        )
+    
+    async def _is_cat_in_bag(self, chat_id: int) -> bool:
+        """Return True if a game is active and in cat_in_bag state (including choosing)."""
+        game = await self.app.store.game.get_active_game(chat_id)
+        return game is not None and game.status in (
+            GameStatus.CAT_IN_BAG.value,
+            GameStatus.CAT_IN_BAG_CHOOSING.value,
+        )
+
     async def handle_update(self, update: dict):
         update = Update.model_validate(update)
         if update.message:
@@ -113,13 +145,37 @@ class BotManager:
             if user_id:
                 await self.app.store.user.get_or_create_user(user_id, from_user.username, from_user.first_name)
 
+            if (
+                text == "/start"
+                and user_id
+                and message.chat.type == ChatType.PRIVATE.value
+            ):
+                game = await self.app.store.game.get_player_active_game(user_id)
+                if game and game.status == GameStatus.FINAL_BETTING.value:
+                    player = await self.app.store.game.get_player(game.id, user_id)
+                    points = player.points if player else 0
+                    await self.app.store.tg_api.send_message(
+                        user_id,
+                        f"🏁 <b>Финальный раунд!</b>\n"
+                        f"Ваши очки: <b>{points}</b>\n\n"
+                        f"Введите вашу ставку (от 1 до {points}):"
+                    )
+                    return
+
             if text.startswith("/") or is_menu_button:
                 await self.router.route_message(self, chat_id, user_id or 0, text)
+                return
+            
+            if user_id and await self._is_cat_in_bag_target(chat_id, user_id):
+                await handle_cat_in_bag_answer(self, chat_id, user_id, text)
                 return
 
             # Check if this message is an answer to an active question
             if user_id and await self._is_pending_answer(chat_id, user_id):
                 await handle_answer_message(self, chat_id, user_id, text)
+                return
+            
+            if user_id and await self._is_cat_in_bag(chat_id):
                 return
 
             # During answering state, ignore messages from non-answerers
@@ -129,6 +185,7 @@ class BotManager:
             # Handle final round DM messages (betting / answering)
             if user_id and message.chat.type == ChatType.PRIVATE.value:
                 game = await self.app.store.game.get_player_active_game(user_id)
+
                 if game and game.status == GameStatus.FINAL_BETTING.value:
                     await handle_final_bet_message(self, user_id, text)
                     return

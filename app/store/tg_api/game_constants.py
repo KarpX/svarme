@@ -30,6 +30,7 @@ SURR_FACES = {
     4 : "🤯"
 }
 
+CAT_IN_BAG_CHANCE = 0.15
 
 class GameModes(Enum):
     STANDART = "standart"
@@ -75,6 +76,8 @@ class GameStatus(Enum):
     ANSWERING = "answering"
     CHOOSING_QUESTION = "choosing_question"
     FINISHED = "finished"
+    CAT_IN_BAG = "cat_in_bag"
+    CAT_IN_BAG_CHOOSING = "cat_in_bag_choosing"
 
 class GameTimers(Enum):
     CHOOSE_TIMEOUT = 30   # секунд на выбор категории/вопроса
