@@ -193,6 +193,8 @@ class BotManager:
                     await handle_final_answer_message(self, user_id, text, game)
                     return
                 
+                return
+                
             if user_id and message.chat.type != ChatType.PRIVATE.value:
                 if await self._is_pending_answer(chat_id, user_id):
                     await handle_answer_message(self, chat_id, user_id, text)

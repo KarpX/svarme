@@ -1,5 +1,7 @@
 from aiohttp.web_app import Application
 
+from app.admin.views import GameStopView, GameView
+
 __all__ = ("register_urls",)
 
 
@@ -9,3 +11,5 @@ def register_urls(application: Application):
     application.router.add_view("/admin/categories", CategoriesView)
     application.router.add_view("/admin/questions", QuestionsView)
     application.router.add_view("/admin/questions/import", QuestionsImportView)
+    application.router.add_view("/admin/games", GameView)
+    application.router.add_view("/admin/games/{game_id}/stop", GameStopView)

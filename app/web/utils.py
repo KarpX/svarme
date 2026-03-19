@@ -2,6 +2,19 @@ import asyncio
 import functools
 
 
+async def _send_and_delete(app, chat_id: int, text: str, delay: float):
+    try:
+        response = await app.store.tg_api.send_message(chat_id, text)
+        if not response:
+            return
+        data = response if isinstance(response, dict) else await response.json()
+        if data.get("ok"):
+            message_id = data["result"]["message_id"]
+            await asyncio.sleep(delay)
+            await app.store.tg_api.delete_message(chat_id, message_id)
+    except Exception:
+        pass
+
 def ratelimit(seconds: float, scope: str = "user_chat"):
     """
     Антиспам-декоратор.
@@ -50,10 +63,7 @@ def ratelimit(seconds: float, scope: str = "user_chat"):
                 should_warn = await app.store.redis.set_limit(warn_key, 5)
                 if should_warn:
                     asyncio.create_task(
-                        app.store.tg_api.send_message(
-                            chat_id,
-                            f"⚠️ <b>Тише-тише!</b> Эта команда доступна раз в {int(seconds)} сек.",
-                        )
+                        _send_and_delete(app, chat_id, f"⚠️ <b>Тише-тише!</b> Эта команда доступна раз в {int(seconds)} сек.", 3.0)
                     )
                 return
 

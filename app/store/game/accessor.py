@@ -61,12 +61,36 @@ class GameAccessor:
                 .where(GameModel.status.notin_(["finished", "waiting", "pending"]))
             )
             return list(result.scalars().all())
+        
+    async def get_all_games_list(self) -> list[GameModel] | None:
+        async with self._session() as session:
+            result = await session.execute(
+                select(GameModel).where(GameModel.status.not_like("finished"))
+            )
+            return list(result.scalars().all())
+        
+    async def get_game_by_id(self, game_id) -> GameModel | None:
+        async with self._session() as session:
+            result = await session.execute(
+                select(GameModel).where(GameModel.id == game_id)
+            )
+            return result.scalar_one_or_none()
 
     async def update_game(self, game_id: int, **kwargs) -> None:
         async with self._session() as session:
             await session.execute(
                 update(GameModel).where(GameModel.id == game_id).values(**kwargs)
             )
+            await session.commit()
+
+    async def delete_active_games(self, game_id: int | None = None) -> None:
+        async with self._session() as session:
+            query = delete(GameModel).where(GameModel.status.notin_(["finished", "waiting", "pending"]))
+
+            if game_id is not None:
+                query = query.where(GameModel.id == game_id)
+
+            await session.execute(query)
             await session.commit()
 
     # ── Players (game_players table) ───────────────────────────────────────
@@ -310,7 +334,7 @@ class GameAccessor:
 
     # ── Lobby messages ─────────────────────────────────────────────────────
 
-    async def add_lobby_messages(self, game_id: int, message_id: int):
+    async def add_lobby_message(self, game_id: int, message_id: int):
         if not message_id:
             return
         async with self._session() as session:
@@ -324,15 +348,15 @@ class GameAccessor:
                 session.add(LobbyMessageModel(game_id=game_id, message_id=message_id))
                 await session.commit()
 
-    async def get_lobby_messages(self, game_id: int) -> list[int]:
+    async def get_lobby_message(self, game_id: int) -> int | None:
         async with self._session() as session:
             result = await session.execute(
                 select(LobbyMessageModel.message_id)
                 .where(LobbyMessageModel.game_id == game_id)
             )
-            return list(result.scalars().all())
+            return result.scalar_one_or_none()
 
-    async def clear_lobby_messages(self, game_id: int):
+    async def clear_lobby_message(self, game_id: int):
         async with self._session() as session:
             await session.execute(
                 delete(LobbyMessageModel).where(LobbyMessageModel.game_id == game_id)

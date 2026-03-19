@@ -10,6 +10,7 @@ from app.admin.schema import (
     QuestionCreateSchema,
     QuestionSchema,
 )
+from app.store.bot.handlers import _finish_game
 
 
 class CategoriesView(web.View):
@@ -201,3 +202,62 @@ class QuestionsImportView(web.View):
             created_questions.append(new_question.to_dict())
         
         return web.json_response({"ok" : True, "questions" : created_questions})
+    
+
+class GameView(web.View):   
+    async def get(self):
+            games = await self.request.app.store.game.get_all_games_list()
+
+            if not games:
+                return web.json_response({"error" : "games not found"}, status=HTTPStatus.NOT_FOUND)
+    
+            result = []
+            for game in games:
+                players = await self.request.app.store.game.get_players(game.id)
+    
+                players_data = []
+                for p in players:
+                    user = await self.request.app.store.user.get_user(p.user_id)
+                    players_data.append({
+                        "user_id": p.user_id,
+                        "username": user.username if user else None,
+                        "first_name": user.first_name if user else None,
+                        "points": p.points,
+                    })
+    
+                result.append({
+                    "id": game.id,
+                    "chat_id": game.chat_id,
+                    "status": game.status,
+                    "game_mode": game.game_mode,
+                    "current_round": game.current_round,
+                    "active_question_id": game.active_question_id,
+                    "choosing_user_id": game.choosing_user_id,
+                    "target_user_id": game.target_user_id,
+                    "remaining_seconds": game.remaining_seconds,
+                    "players": players_data,
+                })
+    
+            return web.json_response(result)
+        
+
+class GameStopView(web.View):
+    async def post(self):
+        """Принудительно завершить игру по ID."""
+        game_id = int(self.request.match_info["game_id"])
+ 
+        game = await self.request.app.store.game.get_game_by_id(game_id)
+        if not game:
+            return web.json_response(
+                {"error": "Game not found"}, status=HTTPStatus.NOT_FOUND
+            )
+ 
+        if game.status == "finished":
+            return web.json_response(
+                {"error": "Game already finished"}, status=HTTPStatus.BAD_REQUEST
+            )
+
+        bot_manager = self.request.app.store.bot
+        await _finish_game(bot_manager, game.chat_id, game_id)
+ 
+        return web.json_response({"ok": True})

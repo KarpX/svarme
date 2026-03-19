@@ -19,7 +19,8 @@ class TgApiAccessor:
     
     async def send_message(self, chat_id: int, text: str):
         url = f"{self.build_url}/sendMessage"
-        await self.session.post(url, json={"chat_id": chat_id, "text": text, "parse_mode" : "HTML"})
+        async with self.session.post(url, json={"chat_id": chat_id, "text": text, "parse_mode" : "HTML"}) as resp:
+            return await resp.json()
 
     async def send_keyboard(self, chat_id: int, buttons: list, text, resize_keyboard=True, one_time_keyboard=False):
         url = f"{self.build_url}/sendMessage"
