@@ -11,6 +11,9 @@ class BotButtons:
 
     exit_lobby = "✂️ Выйти из лобби"
 
+    search = "🔍 Найти игру"
+    cancel_search = "❌ Отменить поиск"
+
 
 class BotCommands:
     start_game = "/game"
@@ -22,6 +25,8 @@ class BotCommands:
     finish_game = "/finish"
 
     exit_lobby = "/leave"
+    search = "/search"
+    cancel_search = "/cancel_search"
 
 SURR_FACES = {
     1 : "😵‍💫",

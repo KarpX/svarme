@@ -66,3 +66,7 @@ class ExitLobbyCallback(CallbackBase):
 class CatInBagTargetCallback(CallbackBase):
     prefix = "cib:"
     target_user_id: int
+
+class SearchModeCallback(CallbackBase):
+    prefix = "sm:"
+    game_mode: str

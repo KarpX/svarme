@@ -10,7 +10,7 @@ from app.store.bot.handlers import (
     _on_answer_button_timeout,
     _on_answering_timeout,
 )
-from app.store.tg_api.game_constants import BotButtons, ChatType, GameStatus, GameTimers
+from app.store.tg_api.game_constants import BotButtons, BotCommands, ChatType, GameStatus, GameTimers
 from app.store.tg_api.schema import Update
 from app.web import logger
 
@@ -111,6 +111,14 @@ class BotManager:
             _on_answering_timeout(self, game_id, chat_id, seconds_left)
         )
 
+    async def _get_effective_chat_id(self, chat_id: int, user_id: int | None) -> int:
+        """Вернуть виртуальный chat_id DM-игры если она есть, иначе реальный chat_id."""
+        if user_id:
+            dm_game = await self.app.store.game.get_player_active_game(user_id)
+            if dm_game and dm_game.game_type == "dm":
+                return dm_game.chat_id
+        return chat_id
+
     async def _is_cat_in_bag_target(self, chat_id: int, user_id: int) -> bool:
         """Return True if the game is in cat_in_bag state and this user is the target."""
         game = await self.app.store.game.get_active_game(chat_id)
@@ -137,10 +145,10 @@ class BotManager:
             from_user = message.from_user
             user_id = from_user.id if message.from_user else None
 
-            is_menu_button = text in [BotButtons.start_game, 
-            BotButtons.menu, BotButtons.rules, BotButtons.statistics, 
+            is_menu_button = text in [BotButtons.start_game,
+            BotButtons.menu, BotButtons.rules, BotButtons.statistics,
             BotButtons.surrender, BotButtons.finish_game,
-            BotButtons.exit_lobby]
+            BotButtons.exit_lobby, BotButtons.search, BotButtons.cancel_search]
 
             if user_id:
                 await self.app.store.user.get_or_create_user(user_id, from_user.username, from_user.first_name)
@@ -162,24 +170,38 @@ class BotManager:
                     )
                     return
 
-            if text.startswith("/") or is_menu_button:
-                await self.router.route_message(self, chat_id, user_id or 0, text)
+            # /game запрещена в личке — там есть кнопка поиска
+            if text in (BotCommands.start_game, BotCommands.start_game + "@SvarMeBot") and message.chat.type == ChatType.PRIVATE.value:
+                from app.store.tg_api.builders import PRIVATE_MENU_BUTTONS, MENU_TEXT
+                await self.app.store.tg_api.send_keyboard(
+                    chat_id, PRIVATE_MENU_BUTTONS,
+                    "ℹ️ В личном чате используй кнопку «🔍 Найти игру» для поиска соперников."
+                )
                 return
-            
-            if user_id and await self._is_cat_in_bag_target(chat_id, user_id):
-                await handle_cat_in_bag_answer(self, chat_id, user_id, text)
+
+            # Для DM-игр (матчмейкинг) chat_id входящего == user_id,
+            # но игра хранится под виртуальным chat_id.
+            # Вычисляем ДО роутинга команд — хэндлеры используют chat_id для поиска игры.
+            effective_chat_id = await self._get_effective_chat_id(chat_id, user_id)
+
+            if text.startswith("/") or is_menu_button:
+                await self.router.route_message(self, effective_chat_id, user_id or 0, text)
+                return
+
+            if user_id and await self._is_cat_in_bag_target(effective_chat_id, user_id):
+                await handle_cat_in_bag_answer(self, effective_chat_id, user_id, text, message.message_id)
                 return
 
             # Check if this message is an answer to an active question
-            if user_id and await self._is_pending_answer(chat_id, user_id):
-                await handle_answer_message(self, chat_id, user_id, text)
+            if user_id and await self._is_pending_answer(effective_chat_id, user_id):
+                await handle_answer_message(self, effective_chat_id, user_id, text, message.message_id)
                 return
-            
-            if user_id and await self._is_cat_in_bag(chat_id):
+
+            if user_id and await self._is_cat_in_bag(effective_chat_id):
                 return
 
             # During answering state, ignore messages from non-answerers
-            if user_id and await self._is_game_answering(chat_id):
+            if user_id and await self._is_game_answering(effective_chat_id):
                 return
 
             # Handle final round DM messages (betting / answering)
@@ -197,7 +219,7 @@ class BotManager:
                 
             if user_id and message.chat.type != ChatType.PRIVATE.value:
                 if await self._is_pending_answer(chat_id, user_id):
-                    await handle_answer_message(self, chat_id, user_id, text)
+                    await handle_answer_message(self, chat_id, user_id, text, message.message_id)
                     return
 
                 if await self._is_game_answering(chat_id):
@@ -206,7 +228,7 @@ class BotManager:
             if message.chat.type != ChatType.PRIVATE.value:
                 return
 
-            await self.router.route_message(self, chat_id, user_id or 0, text)
+            await self.router.route_message(self, effective_chat_id, user_id or 0, text)
 
         elif update.callback_query:
             callback = update.callback_query
@@ -216,7 +238,9 @@ class BotManager:
             data = callback.data
 
             await self.app.store.user.get_or_create_user(user_id)
-            await self.router.route_callback(self, chat_id, message_id, user_id, data, callback.id)
+            # Для DM-игр подменяем chat_id на виртуальный
+            effective_chat_id = await self._get_effective_chat_id(chat_id, user_id)
+            await self.router.route_callback(self, effective_chat_id, message_id, user_id, data, callback.id)
 
     async def _is_pending_answer(self, chat_id: int, user_id: int) -> bool:
         """Return True if the game is in 'answering' state and this user was locked in to answer."""

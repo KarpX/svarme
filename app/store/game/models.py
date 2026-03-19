@@ -1,5 +1,4 @@
-from typing import Optional
-from sqlalchemy import JSON, Integer, String, BigInteger, Boolean, ForeignKey, DateTime
+from sqlalchemy import JSON, Index, Integer, String, BigInteger, Boolean, ForeignKey, DateTime, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 from app.store.database.sqlalchemy_base import BaseModel as Base
@@ -128,3 +127,41 @@ class GameFinishVoteModel(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     game_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("game.id", ondelete="CASCADE"), nullable=False)
     user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("user.id", ondelete="CASCADE"), nullable=False)
+
+class CategoryBoardMessageModel(Base):
+    """message_id живой доски категорий.
+    Для группового чата: user_id=0.
+    Для DM: user_id = реальный user_id игрока.
+    """
+    __tablename__ = "category_board_messages"
+ 
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    game_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("game.id", ondelete="CASCADE"), nullable=False
+    )
+    user_id: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
+    message_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+ 
+    __table_args__ = (
+        UniqueConstraint("game_id", "user_id", name="uq_cbm_game_user"),
+    )
+ 
+ 
+class TempMessageModel(Base):
+    """Временные message_id — вопрос, кнопка ответа, результат.
+    Удаляются пачкой когда вопрос закрывается.
+    Для группового чата: user_id=0.
+    Для DM: user_id = реальный user_id игрока.
+    """
+    __tablename__ = "temp_messages"
+ 
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    game_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("game.id", ondelete="CASCADE"), nullable=False
+    )
+    user_id: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
+    message_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+ 
+    __table_args__ = (
+        Index("ix_temp_messages_game_user", "game_id", "user_id"),
+    )

@@ -12,10 +12,12 @@ async def _on_startup(app: "Application"):
     await app.store.rabbit.connect()
     await app.store.tg_api.connect()
     await app.store.bot.restore_timers()
+    app.store.matchmaking_service.start()
     await app.store.rabbit.start_consuming(app.store.bot.handle_update)
     app.store.poller.start()
 
 async def _on_cleanup(app: "Application"):
+    await app.store.matchmaking_service.stop()
     await app.store.poller.stop()
     await app.store.rabbit.disconnect()
     await app.store.tg_api.disconnect()
@@ -34,6 +36,8 @@ class Store:
         from app.store.game.accessor import GameAccessor
         from app.store.rabbit.accessor import RabbitAccessor
         from app.store.redis.accessor import RedisAccessor
+        from app.store.matchmaking.accessor import MatchmakingAccessor
+        from app.store.matchmaking.service import MatchmakingService
 
         self.quiz = QuizAccessor(self)
         self.game = GameAccessor(self)
@@ -43,6 +47,8 @@ class Store:
         self.poller = Poller(app)
         self.redis = RedisAccessor(app)
         self.rabbit = RabbitAccessor(app)
+        self.matchmaking = MatchmakingAccessor(self)
+        self.matchmaking_service = MatchmakingService(app)
 
 def setup_store(app: "Application") -> None:
     app.database = Database(app)
