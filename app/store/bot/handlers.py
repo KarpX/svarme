@@ -333,6 +333,8 @@ async def _send_category_board(self, chat_id: int, message_id: int | None = None
     
     categories = [c for c in current_categories if any(q.id not in answered_ids for q in c.questions)]
 
+    players = await self.app.store.game.get_players(game.id)
+
     if not categories:
         next_round = game.current_round + 1 if game.current_round is not None else 1
 
@@ -360,8 +362,17 @@ async def _send_category_board(self, chat_id: int, message_id: int | None = None
         await _announce_chooser(self, chat_id, game.choosing_user_id)
 
         return await _send_category_board(self, chat_id, message_id)
+    
+    current_scores = []
+    for p in players:
+        p_user = await self.app.store.user.get_user(p.user_id)
+        p_name = p_user.display_name if p_user else f"ID:{p.user_id}"
+        
+        current_scores.append(f"\n\n{'🟢' if game.choosing_user_id == p.user_id else '⚪'} {p_name} ── ✨ Счёт: {p.points}")
 
-    text = "📋 Выберите категорию:"
+    text = "👤 Текущие игроки:" \
+    f"{''.join(current_scores)}"\
+    "\n\n📋 Выберите категорию:"
     keyboard = build_category_board(categories)
     if message_id is not None:
         await self.app.store.tg_api.edit_message(chat_id, message_id, text, keyboard)
