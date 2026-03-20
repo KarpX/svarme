@@ -1,4 +1,4 @@
-from app.store.bot.callbacks import AnswerCallback, BackCallback, CategoryCallback, FinalCategoryCallback, GameModeCallback, QuestionCallback
+from app.store.bot.callbacks import AnswerCallback, BackCallback, CategoryCallback, FinalCategoryCallback, GameModeCallback, QuestionCallback, SearchModeCallback
 from app.store.tg_api.game_constants import GameModes, BotButtons, BotCommands
 
 MENU_TEXT = (
@@ -6,7 +6,11 @@ MENU_TEXT = (
     "\n\n 🧭 Основная навигация"
     f"\n{BotCommands.start_game} – {BotButtons.start_game}"
     f"\n{BotCommands.exit_lobby} – {BotButtons.exit_lobby}"
-    f"\n{BotCommands.stats} – {BotButtons.statistics}"
+
+    f"\n\n{BotCommands.search} - {BotButtons.search}"
+    f"\n{BotCommands.cancel_search} - {BotButtons.cancel_search}"
+
+    f"\n\n{BotCommands.stats} – {BotButtons.statistics}"
     f"\n{BotCommands.rules} – {BotButtons.rules}"
     
     f"\n\n 🎮 Команды в игре"
@@ -52,6 +56,23 @@ IN_LOBBY_BUTTONS = [
 GAME_BUTTONS = [[ {"text": BotButtons.finish_game}, {"text": BotButtons.surrender}],
                 [{"text": BotButtons.rules}]]
 
+PRIVATE_MENU_BUTTONS = [
+    [{"text": BotButtons.search}, {"text": BotButtons.statistics}],
+    [{"text": BotButtons.rules}, {"text": BotButtons.menu}],
+]
+ 
+SEARCHING_BUTTONS = [
+    [{"text": BotButtons.cancel_search}, {"text": BotButtons.statistics}],
+    [{"text": BotButtons.rules}, {"text": BotButtons.menu}],
+]
+
+def build_search_mode_keyboard() -> dict:
+    """Inline-кнопки выбора режима при /search."""
+    row = [
+        {"text": mode.labels, "callback_data": SearchModeCallback.create_data(game_mode=mode.value)}
+        for mode in GameModes
+    ]
+    return {"inline_keyboard": [row]}
 
 def build_answer_button() -> dict:
     return {"inline_keyboard": [[{"text": "✋ Ответить!", "callback_data": AnswerCallback.prefix}]]}

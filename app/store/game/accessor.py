@@ -4,6 +4,7 @@ from sqlalchemy import delete, select, update
 from sqlalchemy.orm import selectinload
 
 from app.store.game.models import (
+    CategoryBoardMessageModel,
     GameAnsweredQuestionsModel,
     GameCategoriesModel,
     GameFinalAnswerModel,
@@ -14,9 +15,11 @@ from app.store.game.models import (
     GamePlayerModel,
     LobbyMessageModel,
     StatisticModel,
+    TempMessageModel,
     UserModel,
 )
 from app.store.quiz.models import CategoryModel, QuestionModel
+from app.store.tg_api.game_constants import GameStatus
 from app.web import logger
 
 if TYPE_CHECKING:
@@ -51,6 +54,7 @@ class GameAccessor:
                 select(GameModel)
                 .where(GameModel.chat_id == chat_id)
                 .where(GameModel.status.notin_(["finished", "waiting", "pending"]))
+                .limit(1)
             )
             return result.scalar_one_or_none()
 
@@ -172,7 +176,41 @@ class GameAccessor:
                 select(GameModel)
                 .join(GamePlayerModel, GamePlayerModel.game_id == GameModel.id)
                 .where(GamePlayerModel.user_id == user_id)
+                .where(GameModel.game_type == "dm")
                 .where(GameModel.status.notin_(["finished", "waiting", "pending"]))
+                .limit(1)
+            )
+            return result.scalar_one_or_none()
+        
+    async def get_player_active_game_by_type(self, user_id: int, game_type: str) -> GameModel | None:
+        async with self._session() as session:
+            query = (
+                select(GameModel)
+                .join(GamePlayerModel)
+                .where(
+                    GamePlayerModel.user_id == user_id,
+                    GameModel.game_type == game_type,
+                    GameModel.status != GameStatus.FINISHED.value
+                ).limit(1)
+            )
+            result = await session.execute(query)
+            return result.scalar_one_or_none()
+        
+    async def get_player_final_game(self, user_id: int) -> GameModel | None:
+        """Вернуть игру в статусе final_betting или final_answering для игрока.
+        Используется для приёма ставок/ответов — работает для любого game_type.
+        """
+        async with self._session() as session:
+            result = await session.execute(
+                select(GameModel)
+                .join(GamePlayerModel, GamePlayerModel.game_id == GameModel.id)
+                .where(GamePlayerModel.user_id == user_id)
+                .where(GameModel.status.in_([
+                    GameStatus.FINAL_BETTING.value,
+                    GameStatus.FINAL_ANSWERING.value,
+                ]))
+                .order_by(GameModel.id.desc())
+                .limit(1)
             )
             return result.scalar_one_or_none()
 
@@ -182,6 +220,9 @@ class GameAccessor:
         """Обновить статистику после окончания игры."""
         async with self._session() as session:
             for player in players:
+                fresh = await session.get(GamePlayerModel, player.id)
+                actual_points = fresh.points if fresh is not None else player.points
+ 
                 result = await session.execute(
                     select(StatisticModel).where(StatisticModel.user_id == player.user_id)
                 )
@@ -189,13 +230,14 @@ class GameAccessor:
                 if stat is None:
                     stat = StatisticModel(user_id=player.user_id)
                     session.add(stat)
-
+                    await session.flush()
+ 
                 stat.games_played += 1
-                if player.points > stat.max_points:
-                    stat.max_points = player.points
+                if actual_points > stat.max_points:
+                    stat.max_points = actual_points
                 if player.user_id == winner_id:
                     stat.wins += 1
-
+ 
             await session.commit()
 
     async def get_user_statistics(self, user_id: int) -> StatisticModel | None:
@@ -256,6 +298,7 @@ class GameAccessor:
                 select(GameModel)
                 .where(GameModel.chat_id == chat_id)
                 .where(GameModel.status.in_(["waiting", "pending"]))
+                .limit(1)
             )
             return result.scalar_one_or_none()
 
@@ -478,5 +521,80 @@ class GameAccessor:
 
             await session.execute(
                 delete(GameCategoriesModel).where(GameCategoriesModel.game_id == game_id)
+            )
+            await session.commit()
+
+    # ── category board (живая доска) ──────────────────────────────────────────
+    
+    async def get_board_message(self, game_id: int, user_id: int = 0) -> int | None:
+        async with self._session() as session:
+            result = await session.execute(
+                select(CategoryBoardMessageModel.message_id).where(
+                    CategoryBoardMessageModel.game_id == game_id,
+                    CategoryBoardMessageModel.user_id == user_id,
+                )
+            )
+            return result.scalar_one_or_none()
+    
+    async def set_board_message(self, game_id: int, message_id: int, user_id: int = 0) -> None:
+        async with self._session() as session:
+            existing = await session.execute(
+                select(CategoryBoardMessageModel).where(
+                    CategoryBoardMessageModel.game_id == game_id,
+                    CategoryBoardMessageModel.user_id == user_id,
+                )
+            )
+            row = existing.scalar_one_or_none()
+            if row:
+                row.message_id = message_id
+            else:
+                session.add(CategoryBoardMessageModel(
+                    game_id=game_id, user_id=user_id, message_id=message_id
+                ))
+            await session.commit()
+    
+    async def clear_board_messages(self, game_id: int) -> None:
+        async with self._session() as session:
+            await session.execute(
+                delete(CategoryBoardMessageModel).where(CategoryBoardMessageModel.game_id == game_id)
+            )
+            await session.commit()
+    
+    # ── temp messages (вопрос, кнопка, результат) ─────────────────────────────
+    
+    async def add_temp_message(self, game_id: int, message_id: int, user_id: int = 0) -> None:
+        async with self._session() as session:
+            session.add(TempMessageModel(game_id=game_id, user_id=user_id, message_id=message_id))
+            await session.commit()
+    
+    async def add_temp_messages_bulk(self, game_id: int, entries: list[tuple[int, int]]) -> None:
+        """entries: список (user_id, message_id)"""
+        async with self._session() as session:
+            for uid, mid in entries:
+                session.add(TempMessageModel(game_id=game_id, user_id=uid, message_id=mid))
+            await session.commit()
+    
+    async def get_temp_messages(self, game_id: int, user_id: int = 0) -> list[int]:
+        async with self._session() as session:
+            result = await session.execute(
+                select(TempMessageModel.message_id).where(
+                    TempMessageModel.game_id == game_id,
+                    TempMessageModel.user_id == user_id,
+                )
+            )
+            return list(result.scalars().all())
+    
+    async def get_all_temp_messages(self, game_id: int) -> list[TempMessageModel]:
+        """Все временные сообщения игры (все игроки)."""
+        async with self._session() as session:
+            result = await session.execute(
+                select(TempMessageModel).where(TempMessageModel.game_id == game_id)
+            )
+            return list(result.scalars().all())
+    
+    async def clear_temp_messages(self, game_id: int) -> None:
+        async with self._session() as session:
+            await session.execute(
+                delete(TempMessageModel).where(TempMessageModel.game_id == game_id)
             )
             await session.commit()

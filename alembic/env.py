@@ -11,6 +11,7 @@ from alembic import context
 from app.store.database.sqlalchemy_base import BaseModel
 import app.store.quiz.models  # noqa: F401 — registers tables in metadata
 import app.store.game.models  # noqa: F401 — registers tables in metadata
+import app.store.matchmaking.models
 
 if sys.platform == "win32":
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
