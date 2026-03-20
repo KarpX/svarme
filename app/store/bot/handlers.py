@@ -328,15 +328,15 @@ async def handle_finish_game(self, chat_id: int, user_id: int):
         if game_obj: await notify_all(self, game_obj, "‼️ <b>Голосование завершено!</b> Большинство за остановку игры.")
         await self.app.store.game.clear_finish_votes(game_id)
 
-        players = await self.app.store.game.get_players(game_id)
-        eligible = [p for p in players if p.points > 0]
+        # players = await self.app.store.game.get_players(game_id)
+        # eligible = [p for p in players if p.points > 0]
 
-        if len(eligible) < 1:
-            if game_obj: await notify_all(self, game_obj, "💔 Нет ни одного игрока с положительным счётом.")
+        # if len(eligible) < 1:
+        #     if game_obj: await notify_all(self, game_obj, "💔 Нет ни одного игрока с положительным счётом.")
 
-        for p in players:
-            if p.points <= 0:
-                await self.app.store.game.remove_player(game_id, p.user_id)
+        # for p in players:
+        #     if p.points <= 0:
+        #         await self.app.store.game.remove_player(game_id, p.user_id)
 
         await _finish_game(self, chat_id, game_id)
     else:
@@ -365,18 +365,27 @@ async def _finish_game(self, chat_id: int, game_id: int):
     await self.app.store.game.clear_temp_messages(game_id)
     game_obj = await self.app.store.game.get_game_by_id(game_id)
     is_dm = game_obj is not None and game_obj.game_type == "dm"
-    players = await self.app.store.game.get_players(game_id)
     await self.app.store.game.update_game(game_id, status=GameStatus.FINISHED.value)
 
-    if not players:
-        logger.logging.info("Игроков нет")
+    players = await self.app.store.game.get_players(game_id)
+    eligible = [p for p in players if p.points > 0]
+
+    if len(eligible) < 1:
+        if game_obj: await notify_all(self, game_obj, "💔 Нет ни одного игрока с положительным счётом.")
+
+
+    if len(eligible) < 1:
         if not is_dm:
             await self.app.store.tg_api.send_message(chat_id, "🏁 Игра завершена. Участников не осталось.")
             await self.app.store.tg_api.send_keyboard(chat_id, MENU_BUTTONS, MENU_TEXT)
-        else:
+        if is_dm:
             await notify_all(self, game_obj, "🏁 Игра завершена. Участников не осталось.")
             await notify_all(self, game_obj, MENU_TEXT, keyboard=PRIVATE_MENU_BUTTONS)
         return
+    
+    for p in players:
+        if p.points <= 0:
+            await self.app.store.game.remove_player(game_id, p.user_id)
 
     sorted_players = sorted(players, key=lambda p: p.points, reverse=True)
     winner = sorted_players[0]
@@ -1178,7 +1187,7 @@ async def _start_final_betting(self, chat_id: int, game_id: int, final_category)
     if game_bet:
         await notify_all(self, game_bet,
             f"💰 <b>Финальная категория: {cat_name}</b>\n\n"
-            "Каждый игрок получит вопрос в личные сообщения.\n⚠️ Сначала сделайте ставку!",
+            "Каждый игрок получит вопрос в личные сообщения.\n⚠️ Сначала сделайте ставку боту – @SvarMeBot!",
         )
  
     # Store which category is the final one (in game field)
@@ -1209,7 +1218,7 @@ async def _start_final_betting(self, chat_id: int, game_id: int, final_category)
  
 async def handle_final_bet_message(self, user_id: int, text: str):
     """Called from BotManager when status=final_betting and message is a private DM."""
-    game = await self.app.store.game.get_player_active_game(user_id)
+    game = await self.app.store.game.get_player_final_game(user_id)
     if not game or game.status != GameStatus.FINAL_BETTING.value:
         return
  
@@ -1561,15 +1570,21 @@ def _build_search_text(mode_label: str, queue_size: int) -> str:
         f"✏️ Введите /cancel_search чтобы отменить."
     )
 
-@router.message(BotCommands.search, BotButtons.search)
+@router.message(BotCommands.search, BotButtons.search, BotCommands.search + "@SvarMeBot")
 @ratelimit(seconds=5, scope="user")
 async def handle_search(self, chat_id: int, user_id: int):
     """/search — показать выбор режима. Только в личке."""
     # Проверяем что не в активной игре
+    if chat_id != user_id:
+        await self.app.store.tg_api.send_message(
+            chat_id, "❌ Поиск работает только в личных сообщениях."
+        )
+        return
+
     active_game = await self.app.store.game.get_player_active_game(user_id)
     if active_game:
         await self.app.store.tg_api.send_message(
-            chat_id, "❌ Ты уже участвуешь в игре. Сначала заверши её."
+            chat_id, "❌ Вы уже участвуете в игре. Сначала завершите её."
         )
         return
 
@@ -1584,8 +1599,8 @@ async def handle_search(self, chat_id: int, user_id: int):
         pos = next((i + 1 for i, e in enumerate(queue) if e.user_id == user_id), "?")
         await self.app.store.tg_api.send_message(
             chat_id,
-            f"⏳ Вы уже в очереди — режим {mode_label} (позиция {pos}/{len(queue)}).\n"
-            f"Нажмите «{BotButtons.cancel_search}» чтобы выйти.",
+            f"⏳ Вы уже в очереди — режим {mode_label}.\n"
+            f"Введите «{BotCommands.cancel_search}» чтобы выйти.",
         )
         return
 

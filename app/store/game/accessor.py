@@ -54,6 +54,7 @@ class GameAccessor:
                 select(GameModel)
                 .where(GameModel.chat_id == chat_id)
                 .where(GameModel.status.notin_(["finished", "waiting", "pending"]))
+                .limit(1)
             )
             return result.scalar_one_or_none()
 
@@ -175,7 +176,9 @@ class GameAccessor:
                 select(GameModel)
                 .join(GamePlayerModel, GamePlayerModel.game_id == GameModel.id)
                 .where(GamePlayerModel.user_id == user_id)
+                .where(GameModel.game_type == "dm")
                 .where(GameModel.status.notin_(["finished", "waiting", "pending"]))
+                .limit(1)
             )
             return result.scalar_one_or_none()
         
@@ -188,9 +191,27 @@ class GameAccessor:
                     GamePlayerModel.user_id == user_id,
                     GameModel.game_type == game_type,
                     GameModel.status != GameStatus.FINISHED.value
-                )
+                ).limit(1)
             )
             result = await session.execute(query)
+            return result.scalar_one_or_none()
+        
+    async def get_player_final_game(self, user_id: int) -> GameModel | None:
+        """Вернуть игру в статусе final_betting или final_answering для игрока.
+        Используется для приёма ставок/ответов — работает для любого game_type.
+        """
+        async with self._session() as session:
+            result = await session.execute(
+                select(GameModel)
+                .join(GamePlayerModel, GamePlayerModel.game_id == GameModel.id)
+                .where(GamePlayerModel.user_id == user_id)
+                .where(GameModel.status.in_([
+                    GameStatus.FINAL_BETTING.value,
+                    GameStatus.FINAL_ANSWERING.value,
+                ]))
+                .order_by(GameModel.id.desc())
+                .limit(1)
+            )
             return result.scalar_one_or_none()
 
     # ── Statistics ─────────────────────────────────────────────────────────
@@ -277,6 +298,7 @@ class GameAccessor:
                 select(GameModel)
                 .where(GameModel.chat_id == chat_id)
                 .where(GameModel.status.in_(["waiting", "pending"]))
+                .limit(1)
             )
             return result.scalar_one_or_none()
 

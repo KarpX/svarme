@@ -59,22 +59,23 @@ class MatchmakingService:
             return
 
         now = datetime.now(timezone.utc)
-        candidates = queue[:MATCHMAKING_MAX_PLAYERS]
-
-        # Полный состав — сразу запускаем
-        if len(candidates) == MATCHMAKING_MAX_PLAYERS:
+ 
+        # Запускаем столько матчей, сколько хватает игроков на полный состав
+        while len(queue) >= MATCHMAKING_MAX_PLAYERS:
+            candidates = queue[:MATCHMAKING_MAX_PLAYERS]
             await self._start_match(candidates, game_mode)
-            return
-
-        # Проверяем таймаут самого раннего игрока
-        oldest = candidates[0]
-        oldest_joined = (
-            oldest.joined_at.replace(tzinfo=timezone.utc)
-            if oldest.joined_at.tzinfo is None
-            else oldest.joined_at
-        )
-        if (now - oldest_joined).total_seconds() >= MATCHMAKING_MAX_WAIT:
-            await self._start_match(candidates, game_mode)
+            queue = queue[MATCHMAKING_MAX_PLAYERS:]
+ 
+        # Остаток — меньше 4 игроков, проверяем таймаут самого раннего
+        if len(queue) >= MATCHMAKING_MIN_PLAYERS:
+            oldest = queue[0]
+            oldest_joined = (
+                oldest.joined_at.replace(tzinfo=timezone.utc)
+                if oldest.joined_at.tzinfo is None
+                else oldest.joined_at
+            )
+            if (now - oldest_joined).total_seconds() >= MATCHMAKING_MAX_WAIT:
+                await self._start_match(queue, game_mode)
 
     async def _update_search_messages(self, queue, game_mode: str) -> None:
         """Редактировать сообщение поиска у каждого игрока в очереди."""
@@ -119,16 +120,18 @@ class MatchmakingService:
         names_text = ", ".join(player_names)
 
         for user_id in user_ids:
-            from app.store.tg_api.builders import SEARCHING_BUTTONS, GAME_START_TEXT
             # await self.app.store.tg_api.send_message(
             #     user_id,
             #     f"🎮 <b>Матч найден!</b> Режим: {mode_label}\n\n"
             #     f"Игроки: {names_text}\n\n"
             #     f"Игра начинается!",
             # )
-            await self.app.store.tg_api.send_keyboard(user_id, GAME_BUTTONS, f"🎮 <b>Матч найден!</b> Режим: {mode_label}\n\n"
-                f"Игроки: {names_text}\n\n"
-                f"Игра начинается!")
+            try:
+                await self.app.store.tg_api.send_keyboard(user_id, GAME_BUTTONS, f"🎮 Матч найден!\n Режим: {mode_label}\n\n"
+                    f"Игроки: {names_text}\n\n"
+                    f"Игра начинается!")
+            except Exception:
+                pass
 
         # Запускаем игру
         first_chooser = random.choice(user_ids)

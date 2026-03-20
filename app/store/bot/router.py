@@ -2,6 +2,7 @@ from typing import Any
 
 from app.store.bot.callbacks import CallbackBase
 from app.store.tg_api.builders import MENU_TEXT
+from app.web import logger
 
 
 class BotRouter:

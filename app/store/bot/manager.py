@@ -112,7 +112,6 @@ class BotManager:
         )
 
     async def _get_effective_chat_id(self, chat_id: int, user_id: int | None) -> int:
-        """Вернуть виртуальный chat_id DM-игры если она есть, иначе реальный chat_id."""
         if user_id:
             dm_game = await self.app.store.game.get_player_active_game(user_id)
             if dm_game and dm_game.game_type == "dm":
@@ -120,7 +119,6 @@ class BotManager:
         return chat_id
 
     async def _is_cat_in_bag_target(self, chat_id: int, user_id: int) -> bool:
-        """Return True if the game is in cat_in_bag state and this user is the target."""
         game = await self.app.store.game.get_active_game(chat_id)
         return (
             game is not None
@@ -129,7 +127,6 @@ class BotManager:
         )
     
     async def _is_cat_in_bag(self, chat_id: int) -> bool:
-        """Return True if a game is active and in cat_in_bag state (including choosing)."""
         game = await self.app.store.game.get_active_game(chat_id)
         return game is not None and game.status in (
             GameStatus.CAT_IN_BAG.value,
@@ -158,7 +155,7 @@ class BotManager:
                 and user_id
                 and message.chat.type == ChatType.PRIVATE.value
             ):
-                game = await self.app.store.game.get_player_active_game(user_id)
+                game = await self.app.store.game.get_player_final_game(user_id)
                 if game and game.status == GameStatus.FINAL_BETTING.value:
                     player = await self.app.store.game.get_player(game.id, user_id)
                     points = player.points if player else 0
@@ -206,7 +203,7 @@ class BotManager:
 
             # Handle final round DM messages (betting / answering)
             if user_id and message.chat.type == ChatType.PRIVATE.value:
-                game = await self.app.store.game.get_player_active_game(user_id)
+                game = await self.app.store.game.get_player_final_game(user_id)
 
                 if game and game.status == GameStatus.FINAL_BETTING.value:
                     await handle_final_bet_message(self, user_id, text)
@@ -237,7 +234,7 @@ class BotManager:
             user_id = callback.from_user.id
             data = callback.data
 
-            await self.app.store.user.get_or_create_user(user_id)
+            await self.app.store.user.get_or_create_user(user_id, callback.from_user.username, callback.from_user.first_name)
             # Для DM-игр подменяем chat_id на виртуальный
             effective_chat_id = await self._get_effective_chat_id(chat_id, user_id)
             await self.router.route_callback(self, effective_chat_id, message_id, user_id, data, callback.id)
