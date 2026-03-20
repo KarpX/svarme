@@ -1,15 +1,18 @@
 from enum import Enum
 
 class BotButtons:
-    start_game = "🚀 Начать игру"
+    start_game = "🎮 Начать игру"
     statistics = "🏆 Статистика"
-    rules = "📜 Правила"
+    rules = "📖 Правила"
     menu = "☰ Меню"
 
     surrender = "🏳️ Сдаться"
     finish_game = "🏁 Закончить игру"
 
-    exit_lobby = "⛓️‍💥 Выйти из лобби"
+    exit_lobby = "✂️ Выйти из лобби"
+
+    search = "🔍 Найти игру"
+    cancel_search = "❌ Отменить поиск"
 
 
 class BotCommands:
@@ -22,6 +25,8 @@ class BotCommands:
     finish_game = "/finish"
 
     exit_lobby = "/leave"
+    search = "/search"
+    cancel_search = "/cancel_search"
 
 SURR_FACES = {
     1 : "😵‍💫",
@@ -30,6 +35,7 @@ SURR_FACES = {
     4 : "🤯"
 }
 
+CAT_IN_BAG_CHANCE = 0.15
 
 class GameModes(Enum):
     STANDART = "standart"
@@ -75,6 +81,8 @@ class GameStatus(Enum):
     ANSWERING = "answering"
     CHOOSING_QUESTION = "choosing_question"
     FINISHED = "finished"
+    CAT_IN_BAG = "cat_in_bag"
+    CAT_IN_BAG_CHOOSING = "cat_in_bag_choosing"
 
 class GameTimers(Enum):
     CHOOSE_TIMEOUT = 30   # секунд на выбор категории/вопроса

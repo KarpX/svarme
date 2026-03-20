@@ -2,6 +2,7 @@ import asyncio
 
 from app.store.bot.handlers import (
     handle_answer_message,
+    handle_cat_in_bag_answer,
     handle_final_answer_message,
     handle_final_bet_message,
     router,
@@ -9,7 +10,7 @@ from app.store.bot.handlers import (
     _on_answer_button_timeout,
     _on_answering_timeout,
 )
-from app.store.tg_api.game_constants import BotButtons, ChatType, GameStatus, GameTimers
+from app.store.tg_api.game_constants import BotButtons, BotCommands, ChatType, GameStatus, GameTimers
 from app.store.tg_api.schema import Update
 from app.web import logger
 
@@ -62,11 +63,27 @@ class BotManager:
                     else:
                         seconds_left = GameTimers.ANSWERING_TIMEOUT.value
                     self.schedule_answering_timer(game_id, chat_id, seconds_left)
+                    
+            elif game.status == GameStatus.CAT_IN_BAG.value:
+                # target_user_id обязан ответить — восстанавливаем таймер на ввод ответа
+                if game.remaining_seconds is not None:
+                    seconds_left = max(float(game.remaining_seconds), 5.0)
+                elif game.question_asked_at:
+                    asked_at = (game.question_asked_at.replace(tzinfo=timezone.utc)
+                                if game.question_asked_at.tzinfo is None
+                                else game.question_asked_at)
+                    elapsed = (now - asked_at).total_seconds()
+                    seconds_left = max(GameTimers.ANSWERING_TIMEOUT.value - elapsed, 5.0)
+                else:
+                    seconds_left = GameTimers.ANSWERING_TIMEOUT.value
+                self.schedule_answering_timer(game_id, chat_id, seconds_left)
 
     def cancel_timer(self, game_id: int) -> None:
         task = self._timers.pop(game_id, None)
         if task and not task.done():
-            task.cancel()
+            current = asyncio.current_task()
+            if task is not current:
+                task.cancel()
 
     def schedule_choose_timer(self, game_id: int, chat_id: int) -> None:
         self.cancel_timer(game_id)
@@ -94,6 +111,28 @@ class BotManager:
             _on_answering_timeout(self, game_id, chat_id, seconds_left)
         )
 
+    async def _get_effective_chat_id(self, chat_id: int, user_id: int | None) -> int:
+        if user_id:
+            dm_game = await self.app.store.game.get_player_active_game(user_id)
+            if dm_game and dm_game.game_type == "dm":
+                return dm_game.chat_id
+        return chat_id
+
+    async def _is_cat_in_bag_target(self, chat_id: int, user_id: int) -> bool:
+        game = await self.app.store.game.get_active_game(chat_id)
+        return (
+            game is not None
+            and game.status == GameStatus.CAT_IN_BAG.value
+            and game.target_user_id == user_id
+        )
+    
+    async def _is_cat_in_bag(self, chat_id: int) -> bool:
+        game = await self.app.store.game.get_active_game(chat_id)
+        return game is not None and game.status in (
+            GameStatus.CAT_IN_BAG.value,
+            GameStatus.CAT_IN_BAG_CHOOSING.value,
+        )
+
     async def handle_update(self, update: dict):
         update = Update.model_validate(update)
         if update.message:
@@ -103,30 +142,69 @@ class BotManager:
             from_user = message.from_user
             user_id = from_user.id if message.from_user else None
 
-            is_menu_button = text in [BotButtons.start_game, 
-            BotButtons.menu, BotButtons.rules, BotButtons.statistics, 
+            is_menu_button = text in [BotButtons.start_game,
+            BotButtons.menu, BotButtons.rules, BotButtons.statistics,
             BotButtons.surrender, BotButtons.finish_game,
-            BotButtons.exit_lobby]
+            BotButtons.exit_lobby, BotButtons.search, BotButtons.cancel_search]
 
             if user_id:
                 await self.app.store.user.get_or_create_user(user_id, from_user.username, from_user.first_name)
 
+            if (
+                text == "/start"
+                and user_id
+                and message.chat.type == ChatType.PRIVATE.value
+            ):
+                game = await self.app.store.game.get_player_final_game(user_id)
+                if game and game.status == GameStatus.FINAL_BETTING.value:
+                    player = await self.app.store.game.get_player(game.id, user_id)
+                    points = player.points if player else 0
+                    await self.app.store.tg_api.send_message(
+                        user_id,
+                        f"🏁 <b>Финальный раунд!</b>\n"
+                        f"Ваши очки: <b>{points}</b>\n\n"
+                        f"Введите вашу ставку (от 1 до {points}):"
+                    )
+                    return
+
+            # /game запрещена в личке — там есть кнопка поиска
+            if text in (BotCommands.start_game, BotCommands.start_game + "@SvarMeBot") and message.chat.type == ChatType.PRIVATE.value:
+                from app.store.tg_api.builders import PRIVATE_MENU_BUTTONS, MENU_TEXT
+                await self.app.store.tg_api.send_keyboard(
+                    chat_id, PRIVATE_MENU_BUTTONS,
+                    "ℹ️ В личном чате используй кнопку «🔍 Найти игру» для поиска соперников."
+                )
+                return
+
+            # Для DM-игр (матчмейкинг) chat_id входящего == user_id,
+            # но игра хранится под виртуальным chat_id.
+            # Вычисляем ДО роутинга команд — хэндлеры используют chat_id для поиска игры.
+            effective_chat_id = await self._get_effective_chat_id(chat_id, user_id)
+
             if text.startswith("/") or is_menu_button:
-                await self.router.route_message(self, chat_id, user_id or 0, text)
+                await self.router.route_message(self, effective_chat_id, user_id or 0, text)
+                return
+
+            if user_id and await self._is_cat_in_bag_target(effective_chat_id, user_id):
+                await handle_cat_in_bag_answer(self, effective_chat_id, user_id, text, message.message_id)
                 return
 
             # Check if this message is an answer to an active question
-            if user_id and await self._is_pending_answer(chat_id, user_id):
-                await handle_answer_message(self, chat_id, user_id, text)
+            if user_id and await self._is_pending_answer(effective_chat_id, user_id):
+                await handle_answer_message(self, effective_chat_id, user_id, text, message.message_id)
+                return
+
+            if user_id and await self._is_cat_in_bag(effective_chat_id):
                 return
 
             # During answering state, ignore messages from non-answerers
-            if user_id and await self._is_game_answering(chat_id):
+            if user_id and await self._is_game_answering(effective_chat_id):
                 return
 
             # Handle final round DM messages (betting / answering)
             if user_id and message.chat.type == ChatType.PRIVATE.value:
-                game = await self.app.store.game.get_player_active_game(user_id)
+                game = await self.app.store.game.get_player_final_game(user_id)
+
                 if game and game.status == GameStatus.FINAL_BETTING.value:
                     await handle_final_bet_message(self, user_id, text)
                     return
@@ -134,9 +212,11 @@ class BotManager:
                     await handle_final_answer_message(self, user_id, text, game)
                     return
                 
+                return
+                
             if user_id and message.chat.type != ChatType.PRIVATE.value:
                 if await self._is_pending_answer(chat_id, user_id):
-                    await handle_answer_message(self, chat_id, user_id, text)
+                    await handle_answer_message(self, chat_id, user_id, text, message.message_id)
                     return
 
                 if await self._is_game_answering(chat_id):
@@ -145,7 +225,7 @@ class BotManager:
             if message.chat.type != ChatType.PRIVATE.value:
                 return
 
-            await self.router.route_message(self, chat_id, user_id or 0, text)
+            await self.router.route_message(self, effective_chat_id, user_id or 0, text)
 
         elif update.callback_query:
             callback = update.callback_query
@@ -154,8 +234,10 @@ class BotManager:
             user_id = callback.from_user.id
             data = callback.data
 
-            await self.app.store.user.get_or_create_user(user_id)
-            await self.router.route_callback(self, chat_id, message_id, user_id, data, callback.id)
+            await self.app.store.user.get_or_create_user(user_id, callback.from_user.username, callback.from_user.first_name)
+            # Для DM-игр подменяем chat_id на виртуальный
+            effective_chat_id = await self._get_effective_chat_id(chat_id, user_id)
+            await self.router.route_callback(self, effective_chat_id, message_id, user_id, data, callback.id)
 
     async def _is_pending_answer(self, chat_id: int, user_id: int) -> bool:
         """Return True if the game is in 'answering' state and this user was locked in to answer."""

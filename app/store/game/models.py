@@ -1,5 +1,4 @@
-from typing import Optional
-from sqlalchemy import Integer, String, BigInteger, Boolean, ForeignKey, DateTime
+from sqlalchemy import JSON, Index, Integer, String, BigInteger, Boolean, ForeignKey, DateTime, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 from app.store.database.sqlalchemy_base import BaseModel as Base
@@ -9,10 +8,8 @@ class UserModel(Base):
     __tablename__ = "user"
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, unique=True)
-    game_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("game.id", ondelete="SET NULL"), nullable=True)
     username: Mapped[str | None] = mapped_column(String(255), nullable=True)
     first_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    points: Mapped[int] = mapped_column(default=0)
 
     statistic: Mapped["StatisticModel"] = relationship(back_populates="user", uselist=False)
 
@@ -53,7 +50,32 @@ class GameModel(Base):
     question_asked_at: Mapped[DateTime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     remaining_seconds: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
-    current_highest_bet: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    lobby_messages: Mapped[list["LobbyMessageModel"]] = relationship(backref="game", cascade="all, delete-orphan")
+    players: Mapped[list["GamePlayerModel"]] = relationship(back_populates="game", cascade="all, delete-orphan")
+
+
+class GamePlayerModel(Base):
+    """
+    Игрок в конкретной игре. Один пользователь может быть в нескольких играх одновременно.
+    Очки хранятся здесь, а не в UserModel.
+    """
+    __tablename__ = "game_players"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    game_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("game.id", ondelete="CASCADE"), nullable=False)
+    user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("user.id", ondelete="CASCADE"), nullable=False)
+    points: Mapped[int] = mapped_column(Integer, default=0)
+
+    game: Mapped["GameModel"] = relationship(back_populates="players")
+    user: Mapped["UserModel"] = relationship()
+
+
+class LobbyMessageModel(Base):
+    __tablename__ = "lobby_messages"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    game_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("game.id", ondelete="CASCADE"))
+    message_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
 
 
 class GameCategoriesModel(Base):
@@ -105,3 +127,41 @@ class GameFinishVoteModel(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     game_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("game.id", ondelete="CASCADE"), nullable=False)
     user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("user.id", ondelete="CASCADE"), nullable=False)
+
+class CategoryBoardMessageModel(Base):
+    """message_id живой доски категорий.
+    Для группового чата: user_id=0.
+    Для DM: user_id = реальный user_id игрока.
+    """
+    __tablename__ = "category_board_messages"
+ 
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    game_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("game.id", ondelete="CASCADE"), nullable=False
+    )
+    user_id: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
+    message_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+ 
+    __table_args__ = (
+        UniqueConstraint("game_id", "user_id", name="uq_cbm_game_user"),
+    )
+ 
+ 
+class TempMessageModel(Base):
+    """Временные message_id — вопрос, кнопка ответа, результат.
+    Удаляются пачкой когда вопрос закрывается.
+    Для группового чата: user_id=0.
+    Для DM: user_id = реальный user_id игрока.
+    """
+    __tablename__ = "temp_messages"
+ 
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    game_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("game.id", ondelete="CASCADE"), nullable=False
+    )
+    user_id: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
+    message_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+ 
+    __table_args__ = (
+        Index("ix_temp_messages_game_user", "game_id", "user_id"),
+    )

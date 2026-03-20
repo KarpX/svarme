@@ -23,11 +23,11 @@ class Poller:
                     offset = update["update_id"] + 1
 
                     try:
-                        await self.app.store.bot.handle_update(update)
+                        await self.app.store.rabbit.publish(update)
                     except Exception as e:
-                        logging.error(f"Error handling update: {e}")
+                        logging.error(f"Error publishing update to RabbitMQ: {e}")
             except Exception as e:
                 logging.error(f"Error polling Telegram API: {e}")
-                await asyncio.sleep(5)
+                await asyncio.sleep(3)
                 continue
             await asyncio.sleep(0.1)

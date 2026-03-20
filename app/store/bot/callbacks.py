@@ -62,3 +62,11 @@ class JoinLobbyCallback(CallbackBase):
 
 class ExitLobbyCallback(CallbackBase):
     prefix = "exit_lobby"
+
+class CatInBagTargetCallback(CallbackBase):
+    prefix = "cib:"
+    target_user_id: int
+
+class SearchModeCallback(CallbackBase):
+    prefix = "sm:"
+    game_mode: str

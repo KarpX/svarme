@@ -1,9 +1,9 @@
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Update, select
+from sqlalchemy import select, update
 from sqlalchemy.orm import selectinload
 
-from app.store.game.models import StatisticModel, UserModel
+from app.store.game.models import GamePlayerModel, StatisticModel, UserModel
 
 if TYPE_CHECKING:
     from app.store.store import Store
@@ -26,15 +26,18 @@ class UserAccessor:
             )
             user = result.scalar_one_or_none()
             if user is None:
-                user = UserModel(id=tg_id)
+                user = UserModel(id=tg_id, username=username, first_name=first_name)
                 session.add(user)
                 await session.flush()
                 statistic = StatisticModel(user_id=tg_id)
                 session.add(statistic)
                 await session.commit()
             else:
-                if username and (user.username != username or user.first_name != first_name):
+                if username is not None and (user.username != username or user.first_name != first_name):
                     user.username = username
+                    user.first_name = first_name
+                    await session.commit()
+                elif username is None and first_name is not None and user.first_name != first_name:
                     user.first_name = first_name
                     await session.commit()
             return user
@@ -48,12 +51,13 @@ class UserAccessor:
             )
             return result.scalar_one_or_none()
         
-    async def give_points(self, user_id):
+    async def give_points(self, user_id, game_id):
         async with self._session() as session:
             await session.execute(
-                Update(UserModel)
-                .where(UserModel.id == user_id)
-                .values(points=UserModel.points + 10000)
+                update(GamePlayerModel)
+                .where(GamePlayerModel.user_id == user_id)
+                .where(GamePlayerModel.game_id == game_id)
+                .values(points=GamePlayerModel.points + 10000)
             )
 
             await session.commit()
@@ -61,7 +65,7 @@ class UserAccessor:
     async def increment_correct_answers(self, user_id: int):
         async with self._session() as session:
             await session.execute(
-                Update(StatisticModel)
+                update(StatisticModel)
                 .where(StatisticModel.user_id == user_id)
                 .values(right_answers=StatisticModel.right_answers + 1)
             )
